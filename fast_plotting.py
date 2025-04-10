@@ -14,8 +14,8 @@ from jet_selection import (
     process_events,
     select_and_define_leading_jets,
     match_gen_taus,
-    flatten_gen_tau_vars,
-    delta_r_mask
+    flatten_gen_tau_vars
+    #delta_r_mask
 )
 
 # Import functions from jet_plotting.py
@@ -26,24 +26,26 @@ from jet_plotting import (
 
 # Load the file
 filenames = {
-    'Stau_100_1mm'    : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root/Stau_100_1mm/*.root',
-    'Stau_100_10mm'   : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root/Stau_100_10mm/*.root',
-    'Stau_100_100mm'  : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root/Stau_100_100mm/*.root',
-    'Stau_100_1000mm' : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root/Stau_100_1000mm/*.root',
-    'Stau_200_1mm'    : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root/Stau_200_1mm/*.root',
-    'Stau_200_10mm'   : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root/Stau_200_10mm/*.root',
-    'Stau_200_100mm'  : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root/Stau_200_100mm/*.root',
-    'Stau_200_1000mm' : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root/Stau_200_1000mm/*.root',
-    'Stau_300_1mm'    : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root/Stau_300_1mm/*.root',
-    'Stau_300_10mm'   : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root/Stau_300_10mm/*.root',
-    'Stau_300_100mm'  : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root/Stau_300_100mm/*.root',
-    'Stau_300_1000mm' : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root/Stau_300_1000mm/*.root',
-    'Stau_500_1mm'    : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root/Stau_500_1mm/*.root',
-    'Stau_500_10mm'   : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root/Stau_500_10mm/*.root',
-    'Stau_500_100mm'  : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root/Stau_500_100mm/*.root',
-    'Stau_500_1000mm' : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root/Stau_500_1000mm/*.root',
+    'Stau_100_1mm'    : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root_GenVtx/Stau_100_1mm/*.root',
+    'Stau_100_10mm'   : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root_GenVtx/Stau_100_10mm/*.root',
+    'Stau_100_100mm'  : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root_GenVtx/Stau_100_100mm/*.root',
+    'Stau_100_1000mm' : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root_GenVtx/Stau_100_1000mm/*.root',
+    'Stau_200_1mm'    : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root_GenVtx/Stau_200_1mm/*.root',
+    'Stau_200_10mm'   : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root_GenVtx/Stau_200_10mm/*.root',
+    'Stau_200_100mm'  : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root_GenVtx/Stau_200_100mm/*.root',
+    'Stau_200_1000mm' : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root_GenVtx/Stau_200_1000mm/*.root',
+    'Stau_300_1mm'    : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root_GenVtx/Stau_300_1mm/*.root',
+    'Stau_300_10mm'   : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root_GenVtx/Stau_300_10mm/*.root',
+    'Stau_300_100mm'  : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root_GenVtx/Stau_300_100mm/*.root',
+    'Stau_300_1000mm' : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root_GenVtx/Stau_300_1000mm/*.root',
+    'Stau_500_1mm'    : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root_GenVtx/Stau_500_1mm/*.root',
+    'Stau_500_10mm'   : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root_GenVtx/Stau_500_10mm/*.root',
+    'Stau_500_100mm'  : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root_GenVtx/Stau_500_100mm/*.root',
+    'Stau_500_1000mm' : 'root://cmseos.fnal.gov///store/user/dally/first_skim_muon_root_GenVtx/Stau_500_1000mm/*.root',
 }
-PFNanoAODSchema.mixins["DisMuon"] = "Muon"
+
+#PFNanoAODSchema.mixins["DisMuon"] = "Muon"
+
 samples = {}
 for sample_name, files in filenames.items():
     samples[sample_name] = NanoEventsFactory.from_root(
@@ -72,7 +74,7 @@ if __name__ == '__main__':
         # Match gen taus to jets using both pt-based and leading-score methods
         (gen_taus, gen_taus_matched_by_dxy,
             gen_taus_matched_by_pt, jet_matched_gen_taus_pt,
-            gen_taus_matched_by_score, jet_matched_gen_taus_score,
+            gen_vis_taus_matched_by_score, jet_matched_gen_taus_score,
             matched_leading_jets_flat, all_unmatched_jets_pt) = match_gen_taus(
             cut_filtered_events, 
             leading_pt_jets, leading_dxy_jets,
@@ -88,7 +90,7 @@ if __name__ == '__main__':
 
     
     # Now call plot_sample_grid using stored efficiency results
-    plot_efficiency_from_json("score_efficiency_results.json", "efficiency_grid.pdf")
+    plot_efficiency_from_json("dxy_efficiency_results.json", "efficiency_grid.pdf")
 
 
 

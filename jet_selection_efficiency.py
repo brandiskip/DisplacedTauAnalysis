@@ -83,7 +83,7 @@ if __name__ == '__main__':
         # Match gen taus to jets using both pt-based and leading-score methods
         (gen_taus,
          gen_taus_matched_by_pt, jet_matched_gen_taus_pt,
-         gen_taus_matched_by_score, jet_matched_gen_taus_score,
+         gen_vis_taus_matched_by_score, jet_matched_gen_taus_score,
          matched_leading_jets_flat, all_unmatched_jets_pt) = match_gen_taus(cut_filtered_events, leading_pt_jets, leading_score_jets, jets)
         
         # Flatten variables for histogram filling 
