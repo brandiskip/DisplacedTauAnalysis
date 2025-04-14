@@ -1,7 +1,8 @@
+
 ##Takes as input GEN-SIM-RECO
 # Auto generated configuration file
-# using: 
-# Revision: 1.19 
+# using:
+# Revision: 1.19
 
 # This configuration file runs the first step of the DQM sequence.
 # Usage:
@@ -9,7 +10,7 @@
 # Output:
 # step3_pre4_inDQM.root - input for the next step in the DQM sequence, harvestingstep_phase2tk_cfg.py
 
-# Source: /local/reps/CMSSW/CMSSW/Configuration/Applications/python/ConfigBuilder.py,v 
+# Source: /local/reps/CMSSW/CMSSW/Configuration/Applications/python/ConfigBuilder.py,v
 # with command line options: step3 --conditions auto:phase2_realistic_T21 -s RAW2DIGI,L1Reco,RECO,RECOSIM,VALIDATION:@phase2Validation,DQM:@phase2 --datatier DQMIO -n 10 --geometry Extended2026D98 --era Phase2C11M9 --eventcontent DQM --no_exec
 import FWCore.ParameterSet.Config as cms
 
@@ -35,7 +36,7 @@ process.load('DQMOffline.Configuration.DQMOffline_cff')
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
 
 process.maxEvents = cms.untracked.PSet(
-    input = cms.untracked.int32(10),
+    input = cms.untracked.int32(100),
     output = cms.optional.untracked.allowed(cms.int32,cms.PSet)
 )
 
@@ -44,7 +45,7 @@ process.source = cms.Source("PoolSource",
     fileNames = cms.untracked.vstring('/store/relval/CMSSW_14_0_0_pre2/RelValTTbar_14TeV/GEN-SIM-DIGI-RAW/PU_133X_mcRun4_realistic_v1_STD_2026D98_PU200_RV229-v1/2580000/0b2b0b0b-f312-48a8-9d46-ccbadc69bbfd.root'),
     secondaryFileNames = cms.untracked.vstring()
 )
-
+process.source.eventsToProcess = cms.untracked.VEventRange("1:96:9515")
 process.options = cms.untracked.PSet(
     IgnoreCompletely = cms.untracked.vstring(),
     Rethrow = cms.untracked.vstring(),
@@ -65,7 +66,7 @@ process.options = cms.untracked.PSet(
     numberOfConcurrentLuminosityBlocks = cms.untracked.uint32(1),
     numberOfConcurrentRuns = cms.untracked.uint32(1),
     numberOfStreams = cms.untracked.uint32(0),
-    numberOfThreads = cms.untracked.uint32(4),
+    numberOfThreads = cms.untracked.uint32(1),
     printDependencies = cms.untracked.bool(False),
     sizeOfStackForThreadsInKB = cms.optional.untracked.uint32,
     throwIfIllegalParameter = cms.untracked.bool(True),
@@ -136,7 +137,7 @@ process.schedule = cms.Schedule(process.rechits_step,
 # customisation of the process.
 
 # Automatic addition of the customisation function from SimGeneral.MixingModule.fullMixCustomize_cff
-from SimGeneral.MixingModule.fullMixCustomize_cff import setCrossingFrameOn 
+from SimGeneral.MixingModule.fullMixCustomize_cff import setCrossingFrameOn
 
 #call to customisation function setCrossingFrameOn imported from SimGeneral.MixingModule.fullMixCustomize_cff
 process = setCrossingFrameOn(process)

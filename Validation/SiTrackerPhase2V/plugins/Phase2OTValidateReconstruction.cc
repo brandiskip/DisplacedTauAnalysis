@@ -21,6 +21,7 @@
 #include <memory>
 #include <numeric>
 #include <vector>
+#include <fstream>
 #include "DQMServices/Core/interface/DQMEDAnalyzer.h"
 #include "DQMServices/Core/interface/DQMStore.h"
 #include "DataFormats/Common/interface/DetSetVector.h"
@@ -424,6 +425,16 @@ void Phase2OTValidateReconstruction::analyze(const edm::Event &iEvent, const edm
           MCTruthTTTrackHandle->findTTTrackPtrs(tp_ptr);
 
       // ----------------------------------------------------------------------------------------------
+      if (evtId.event() == 9515) {
+      std::cout << "Matching TP with: pt=" << tmp_tp_pt 
+                << ", eta=" << tmp_tp_eta 
+                << ", phi=" << tmp_tp_phi 
+                << ", z0=" << tmp_tp_z0 
+                << ", d0=" << tmp_tp_d0 
+                << ", pdgId=" << tmp_tp_pdgid
+                << std::endl;
+      }
+
       // loop over matched L1 tracks
       // here, "match" means tracks that can be associated to a TrackingParticle
       // with at least one hit of at least one of its clusters
@@ -450,6 +461,27 @@ void Phase2OTValidateReconstruction::analyze(const edm::Event &iEvent, const edm
         dmatch_phi = std::fabs(my_tp->p4().phi() - tmp_tp_phi);
         match_id = my_tp->pdgId();
         float tmp_trk_chi2dof = thisTrack->chi2Red();
+
+        
+        if (evtId.event() == 9515 && evtId.luminosityBlock() == 96 && evtId.run() == 1) {
+          float d0 = -thisTrack->POCA().x() * sin(thisTrack->momentum().phi()) +
+                     thisTrack->POCA().y() * cos(thisTrack->momentum().phi());
+
+          std::ofstream logFile("event_9515_candidates.txt", std::ios_base::app);
+          if (logFile.is_open()) {
+            logFile << "Run: " << evtId.run()
+                    << ", Lumi: " << evtId.luminosityBlock()
+                    << ", Event: " << evtId.event()
+                    << "  Candidate: pt=" << thisTrack->momentum().perp()
+                    << ", eta=" << thisTrack->momentum().eta()
+                    << ", phi=" << thisTrack->momentum().phi()
+                    << ", chi2=" << tmp_trk_chi2dof                  // FIXED: was 'chi2dof'
+                    << ", nStubs=" << tmp_trk_nstub                 // FIXED: was 'nStubs'
+                    << ", d0=" << d0
+                    << ", isGenuine=" << MCTruthTTTrackHandle->isGenuine(thisTrack)  // FIXED: was 'trackHandle'
+                    << std::endl;
+          }
+        }
 
         // ensure that track is uniquely matched to the TP we are looking at!
         if (dmatch_pt < 0.1 && dmatch_eta < 0.1 && dmatch_phi < 0.1 && tmp_tp_pdgid == match_id) {
@@ -488,6 +520,8 @@ void Phase2OTValidateReconstruction::analyze(const edm::Event &iEvent, const edm
       //Add cuts for the matched tracks, numerator
       if (tmp_matchTrk_nStub < L1Tk_minNStub || tmp_matchtrk_chi2dof > L1Tk_maxChi2dof)
         continue;
+      
+
 
       // fill matched track histograms (if passes all criteria)
       match_tp_pt->Fill(tmp_tp_pt);
@@ -1358,7 +1392,7 @@ void Phase2OTValidateReconstruction::fillDescriptions(edm::ConfigurationDescript
   }
   {
     edm::ParameterSetDescription psd0;
-    psd0.add<int>("Nbinsx", 50);
+    psd0.add<int>("Nbinsx", 200);
     psd0.add<double>("xmax", 2);
     psd0.add<double>("xmin", -2);
     desc.add<edm::ParameterSetDescription>("TH1Effic_d0", psd0);
