@@ -19,7 +19,7 @@ filenames = {
     'Stau_100_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_100_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_200_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_200_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_200_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_200_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_200_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_300_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
@@ -29,7 +29,7 @@ filenames = {
     'Stau_500_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_500_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_500_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_500_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_500_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
 }
 
 PFNanoAODSchema.mixins["DisMuon"] = "Muon"
@@ -40,11 +40,11 @@ for sample_name, files in filenames.items():
         schemaclass=PFNanoAODSchema,
         metadata={"dataset": "MC"}
     ).events()
-'''
+
 def delta_r_mask(first: ak.highlevel.Array, second: ak.highlevel.Array, threshold: float) -> ak.highlevel.Array: 
     mval = first.metric_table(second) 
     return ak.all(mval > threshold, axis=-1)
-'''
+
 # ----------------------------------------------------------------------
 # Main loop: Process each sample and produce histograms.
 # ----------------------------------------------------------------------
@@ -93,7 +93,58 @@ if __name__ == '__main__':
 
         # Select jets with |eta| < 2.4 and pt > 20
         jets = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20)]
-        
+        jets = jets[jets.disTauTag_score1 > 0.90]
+
+        # Sort the selected jets by disTauTag_score1 (descending) and take the first jet per event
+        sorted_by_score = jets[ak.argsort(jets.disTauTag_score1, ascending=False)]
+        highest_score_jets = ak.singletons(ak.firsts(sorted_by_score))
+
+        sorted_by_pt = jets[ak.argsort(jets.pt, ascending=False)]
+        leading_pt_jets = ak.singletons(ak.firsts(sorted_by_pt))
+        jet_matched_gen_vis_taus_pt = cut_filtered_events.GenVisStauTaus.nearest(leading_pt_jets, threshold=0.4)
+        jet_matched_gen_vis_taus_pt = ak.drop_none(jet_matched_gen_vis_taus_pt)
+
+        jet_matched_gen_vis_taus_score = cut_filtered_events.GenVisStauTaus.nearest(highest_score_jets, threshold=0.4)
+        jet_matched_gen_vis_taus_score = ak.drop_none(jet_matched_gen_vis_taus_score)
+
+        # Define jets before veto
+        #jets_before_veto = jet_matched_gen_vis_taus_pt
+        jets_before_veto = jet_matched_gen_vis_taus_score
+
+        # Define each veto separately
+        jets_no_photon   = jets_before_veto[delta_r_mask(jets_before_veto, cut_filtered_events.Photon,   0.4)]
+        jets_no_electron = jets_before_veto[delta_r_mask(jets_before_veto, cut_filtered_events.Electron, 0.4)]
+        jets_no_muon     = jets_before_veto[delta_r_mask(jets_before_veto, cut_filtered_events.Muon,     0.4)]
+        jets_no_dismuon  = jets_before_veto[delta_r_mask(jets_before_veto, cut_filtered_events.DisMuon,  0.4)]
+
+        plt.hist(ak.to_numpy(ak.flatten(jets_before_veto.disTauTag_score1.compute())), bins=10, range=(0.9, 1), histtype='step', label='Before Veto')
+        plt.hist(ak.to_numpy(ak.flatten(jets_no_photon.disTauTag_score1.compute())), bins=10, range=(0.9, 1), histtype='step', label='No Photon')
+        plt.hist(ak.to_numpy(ak.flatten(jets_no_electron.disTauTag_score1.compute())), bins=10, range=(0.9, 1), histtype='step', label='No Electron')
+        plt.hist(ak.to_numpy(ak.flatten(jets_no_muon.disTauTag_score1.compute())), bins=10, range=(0.9, 1), histtype='step', label='No Muon')
+        plt.hist(ak.to_numpy(ak.flatten(jets_no_dismuon.disTauTag_score1.compute())), bins=10, range=(0.9, 1), histtype='step', label='No DisMuon')
+
+        plt.xlabel("Jet disTauTag Score")
+        plt.ylabel("Counts")
+        plt.title(f"{sample_name} Jet disTauTag Score Before/After Vetoes")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(f"{sample_name}_JetScore_VetoComparison.pdf")
+        plt.close()
+        '''
+        plt.hist(ak.to_numpy(ak.flatten(jets_before_veto.pt.compute())), bins=60, range=(0,750), histtype='step', label='Before Veto')
+        plt.hist(ak.to_numpy(ak.flatten(jets_no_photon.pt.compute())), bins=60, range=(0,750), histtype='step', label='No Photon')
+        plt.hist(ak.to_numpy(ak.flatten(jets_no_electron.pt.compute())), bins=60, range=(0,750), histtype='step', label='No Electron')
+        plt.hist(ak.to_numpy(ak.flatten(jets_no_muon.pt.compute())), bins=60, range=(0,750), histtype='step', label='No Muon')
+        plt.hist(ak.to_numpy(ak.flatten(jets_no_dismuon.pt.compute())), bins=60, range=(0,750), histtype='step', label='No DisMuon')
+
+        plt.xlabel("Jet $p_T$ [GeV]")
+        plt.ylabel("Counts")
+        plt.title(f"{sample_name} Jet $p_T$ Before/After Vetoes")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(f"{sample_name}_JetPt_VetoComparison.pdf")
+        plt.close()
+
         # Sort the selected jets by pt (descending) and take the first jet per event
         sorted_by_pt = jets[ak.argsort(jets.pt, ascending=False)]
         leading_pt_jets = ak.singletons(ak.firsts(sorted_by_pt))
@@ -230,7 +281,7 @@ if __name__ == '__main__':
     plt.savefig(output_file)
     plt.close()
     print(f"Saved efficiency plot to {output_file}")
-
+    '''
 
 
 
