@@ -108,8 +108,8 @@ if __name__ == '__main__':
         charged_sel = events.Jet.constituents.pf.charge != 0
         dxy = ak.flatten(events.Jet.constituents.pf[ak.argmax(events.Jet.constituents.pf[charged_sel].pt, axis=2, keepdims=True)].d0, axis = 2)
         events['Jet'] = ak.with_field(events.Jet, dxy, where="dxy")
-        vx = events.GenVisTau.parent.vx
-        vy = events.GenVisTau.parent.vy
+        vx = events.GenVisTau.parent.vx - events.GenVisTau.parent.parent.vx
+        vy = events.GenVisTau.parent.vy - events.GenVisTau.parent.parent.vy
         Lxy = np.sqrt(vx**2 + vy**2)
         parent_with_Lxy = ak.with_field(events.GenVisTau.parent, Lxy, where="Lxy")
         events['GenVisTau'] = ak.with_field(events.GenVisTau, parent_with_Lxy, where="parent")
@@ -149,11 +149,8 @@ if __name__ == '__main__':
         cut_filtered_events.GenVisStauTaus = cut_filtered_events.GenVisStauTaus[(cut_filtered_events.GenVisStauTaus.pt > 20) & (abs(cut_filtered_events.GenVisStauTaus.eta) < 2.4)]
 
         # Select jets with |eta| < 2.4 and pt > 20
-        jets = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20)]
+        jets = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20) & (cut_filtered_events.Jet.jetId >> 2)]
         
-        jet_matched_gen_vis_taus = cut_filtered_events.GenVisStauTaus.nearest(jets, threshold=0.4)
-        jet_matched_gen_vis_taus = ak.drop_none(jet_matched_gen_vis_taus)
-
         GenVisTau_matched_to_jet = jets.nearest(cut_filtered_events.GenVisStauTaus, threshold=0.4)
         GenVisTau_matched_to_jet = ak.drop_none(GenVisTau_matched_to_jet)
 
