@@ -140,7 +140,7 @@ if __name__ == '__main__':
 
         filtered_events = events[one_tauh_evt & one_taul_evt]  # Filtered events are events with one hadronic tau and one leptonic tau
     
-        tau_selections = ak.any((filtered_events.staus_taus.pt > 20) & (abs(filtered_events.staus.eta) < 2.4), axis=-1)
+        tau_selections = ak.any((filtered_events.staus_taus.pt > 20) & (abs(filtered_events.staus_taus.eta) < 2.4), axis=-1)
         num_taus = ak.num(filtered_events.staus_taus[tau_selections])
         num_tau_mask = num_taus > 1
         cut_filtered_events = filtered_events[num_tau_mask]
@@ -149,12 +149,17 @@ if __name__ == '__main__':
         cut_filtered_events.GenVisStauTaus = cut_filtered_events.GenVisStauTaus[(cut_filtered_events.GenVisStauTaus.pt > 20) & (abs(cut_filtered_events.GenVisStauTaus.eta) < 2.4)]
 
         # Select jets with |eta| < 2.4 and pt > 20
-        jets = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20) & (cut_filtered_events.Jet.jetId >> 2)]
+        #jets = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20) & (cut_filtered_events.Jet.jetId >> 2)]
+        #jets = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20) & (cut_filtered_events.Jet.isTightLeptonVeto)]
+        jets = events.Jet[(abs(events.Jet.eta) < 2.4) & (events.Jet.pt > 20) & (events.Jet.isTightLeptonVeto)]
         
-        GenVisTau_matched_to_jet = jets.nearest(cut_filtered_events.GenVisStauTaus, threshold=0.4)
+        #GenVisTau_matched_to_jet = jets.nearest(cut_filtered_events.GenVisStauTaus, threshold=0.4)
+        GenVisTau_matched_to_jet = jets.nearest(events.GenVisStauTaus, threshold=0.4)
+        #GenVisTau_matched_to_jet = cut_filtered_events.GenVisStauTaus.nearest(jets, threshold=0.4)
+
         GenVisTau_matched_to_jet = ak.drop_none(GenVisTau_matched_to_jet)
 
-        Lxy_axis = axis.Regular(30, 0, 30, name="Lxy", label="Lxy [cm]")
+        Lxy_axis = axis.Regular(100, 0, 100, name="Lxy", label="Lxy [cm]")
 
         hist_Lxy_den = Hist(Lxy_axis)
         hist_Lxy_num = Hist(Lxy_axis)
