@@ -14,32 +14,48 @@ np.set_printoptions(precision=6, suppress=False, threshold=np.inf)
 
 # Load the file
 filenames = {
-    'Stau_100_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_100_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_100_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_100_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_200_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_200_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_200_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_200_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_100_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_100_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_100_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_100_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_200_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_200_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_200_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_200_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_300_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_300_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_300_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_300_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_500_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_500_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_500_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_500_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_100_1mm'   : 'root://cmseos.fnal.gov//store/user/lpcdisptau/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_noskim_v1/SMS-TStauStau_MStau-100_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_100_10mm'  : 'root://cmseos.fnal.gov//store/user/lpcdisptau/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_noskim_v1/SMS-TStauStau_MStau-100_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_100_100mm' : 'root://cmseos.fnal.gov//store/user/lpcdisptau/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_noskim_v1/SMS-TStauStau_MStau-100_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_300_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_300_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_300_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_300_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_500_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_500_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_500_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_500_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
 }
 
 PFNanoAODSchema.mixins["DisMuon"] = "Muon"
+PFNanoAODSchema.error_missing_event_ids = False
 samples = {}
+#eventsnotselected = {}
 for sample_name, files in filenames.items():
     samples[sample_name] = NanoEventsFactory.from_root(
         {files: "Events"},
         schemaclass=PFNanoAODSchema,
         metadata={"dataset": "MC"}
     ).events()
+    #eventsnotselected[sample_name] = NanoEventsFactory.from_root(
+        #{files: "EventsNotSelected"},
+        #schemaclass=PFNanoAODSchema,
+        #metadata={"dataset": "MC"}
+    #).events()
 
 def delta_r_mask(first: ak.highlevel.Array, second: ak.highlevel.Array, threshold: float) -> ak.highlevel.Array: 
     mval = first.metric_table(second) 
@@ -102,12 +118,16 @@ os.makedirs(output_dir, exist_ok=True)
 # Main loop: Process each sample and produce histograms.
 # ----------------------------------------------------------------------
 if __name__ == '__main__':
-    for sample_name, events in samples.items():
+    for sample_name in samples.keys():
         print(f"Processing sample: {sample_name}")
+        events = samples[sample_name]
+
         # add dxy to jet fields
         charged_sel = events.Jet.constituents.pf.charge != 0
         dxy = ak.flatten(events.Jet.constituents.pf[ak.argmax(events.Jet.constituents.pf[charged_sel].pt, axis=2, keepdims=True)].d0, axis = 2)
         events['Jet'] = ak.with_field(events.Jet, dxy, where="dxy")
+
+        # add Lxy to GenVisTau.parent
         vx = events.GenVisTau.parent.vx - events.GenVisTau.parent.parent.vx
         vy = events.GenVisTau.parent.vy - events.GenVisTau.parent.parent.vy
         Lxy = np.sqrt(vx**2 + vy**2)
@@ -149,17 +169,62 @@ if __name__ == '__main__':
         cut_filtered_events.GenVisStauTaus = cut_filtered_events.GenVisStauTaus[(cut_filtered_events.GenVisStauTaus.pt > 20) & (abs(cut_filtered_events.GenVisStauTaus.eta) < 2.4)]
 
         # Select jets with |eta| < 2.4 and pt > 20
-        #jets = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20) & (cut_filtered_events.Jet.jetId >> 2)]
+        jets = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20)]
         #jets = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20) & (cut_filtered_events.Jet.isTightLeptonVeto)]
-        jets = events.Jet[(abs(events.Jet.eta) < 2.4) & (events.Jet.pt > 20) & (events.Jet.isTightLeptonVeto)]
         
-        #GenVisTau_matched_to_jet = jets.nearest(cut_filtered_events.GenVisStauTaus, threshold=0.4)
-        GenVisTau_matched_to_jet = jets.nearest(events.GenVisStauTaus, threshold=0.4)
-        #GenVisTau_matched_to_jet = cut_filtered_events.GenVisStauTaus.nearest(jets, threshold=0.4)
-
+        GenVisTau_matched_to_jet = jets.nearest(cut_filtered_events.GenVisStauTaus, threshold=0.4)
         GenVisTau_matched_to_jet = ak.drop_none(GenVisTau_matched_to_jet)
 
-        Lxy_axis = axis.Regular(100, 0, 100, name="Lxy", label="Lxy [cm]")
+        ################################################################################################################
+        # Events Not Selected
+        ################################################################################################################
+        '''
+        # for EventsNotSelected
+        ens_events = eventsnotselected[sample_name]
+
+        # Compute Lxy EventsNotSelected
+        ens_Lxy = np.sqrt(ens_events.GenPart.vx**2 + ens_events.GenPart.vy**2)
+
+        # Select staus from GenPart in eventsnotselected
+        gpart_ens = ens_events.GenPart
+        selected_staus = gpart_ens[(abs(gpart_ens.pdgId) == 1000015) & (gpart_ens.hasFlags(["fromHardProcess"])) & (gpart_ens.pt > 10)]
+
+        ens_events['GenPart'] = ak.with_field(ens_events.GenPart, ens_Lxy, where="Lxy")
+
+        ens_events['staus'] = gpart_ens[(abs(gpart_ens.pdgId) == 1000015) & (gpart_ens.hasFlags("isLastCopy"))] 
+
+        ens_events['staus_taus'] = ens_events.staus.distinctChildren[ (abs(ens_events.staus.distinctChildren.pdgId) == 15) & \
+                                                          (ens_events.staus.distinctChildren.hasFlags("isLastCopy")) & \
+                                                        (ens_events.staus.distinctChildren.hasFlags("fromHardProcess")) \
+                                                         ]
+
+        ens_events['staus_taus'] = ak.firsts(ens_events.staus_taus[ak.argsort(ens_events.staus_taus.pt, ascending=False)], axis = 2)
+        ens_staus_taus = ens_events['staus_taus']
+
+        ens_mask_taul = ak.any((abs(ens_staus_taus.distinctChildren.pdgId) == 11) | (abs(ens_staus_taus.distinctChildren.pdgId) == 13), axis=-1)
+        ens_mask_tauh = ~ens_mask_taul
+
+        ens_one_tauh_evt = (ak.sum(ens_mask_tauh, axis=-1) > 0) & (ak.sum(ens_mask_tauh, axis=-1) < 3)
+        ens_one_taul_evt = (ak.sum(ens_mask_taul, axis=-1) > 0) & (ak.sum(ens_mask_taul, axis=-1) < 3)
+
+        ens_filtered_events = ens_events[ens_one_tauh_evt & ens_one_taul_evt]  # Filtered events are events with one hadronic tau and one leptonic tau
+    
+        ens_tau_selections = ak.any((ens_filtered_events.staus_taus.pt > 20) & (abs(ens_filtered_events.staus_taus.eta) < 2.4), axis=-1)
+        ens_num_taus = ak.num(ens_filtered_events.staus_taus[ens_tau_selections])
+        ens_num_tau_mask = ens_num_taus > 1
+        ens_cut_filtered_events = ens_filtered_events[ens_num_tau_mask]
+        '''
+        # Need to select visible decay products from events not selected
+        # The following mask does not work because ens_mask_tauh is using eventsnotselected and can't apply that to ens_cut_filtered_events
+        #had_gen_taus = ens_cut_filtered_events.staus_taus[ens_mask_tauh]
+        #ens_gen_had_distinctChildren = had_gen_taus.distinctChildren[(abs(had_gen_taus.distinctChildren.pdgId) != 16)]
+
+
+        ################################################################################################################
+        # Plotting script
+        ################################################################################################################
+
+        Lxy_axis = axis.Regular(30, 0, 30, name="Lxy", label="Lxy [cm]")
 
         hist_Lxy_den = Hist(Lxy_axis)
         hist_Lxy_num = Hist(Lxy_axis)
