@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
+import boost_histogram as bh 
 import hist
 import vector
 from hist import Hist, axis, intervals
@@ -32,12 +33,12 @@ filenames = {
     #'Stau_500_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     #'Stau_100_1mm'   : 'root://cmseos.fnal.gov//store/user/lpcdisptau/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_noskim_v1/SMS-TStauStau_MStau-100_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     #'Stau_100_10mm'  : 'root://cmseos.fnal.gov//store/user/lpcdisptau/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_noskim_v1/SMS-TStauStau_MStau-100_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    #'Stau_100_100mm' : 'root://cmseos.fnal.gov//store/user/lpcdisptau/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_noskim_v1/SMS-TStauStau_MStau-100_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_300_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_300_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    'Stau_100_100mm' : 'root://cmseos.fnal.gov//store/user/lpcdisptau/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_noskim_v1/SMS-TStauStau_MStau-100_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_300_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_300_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_300_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_500_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_500_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_500_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_500_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_500_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
 }
 
@@ -213,23 +214,25 @@ if __name__ == '__main__':
         ens_num_taus = ak.num(ens_filtered_events.staus_taus[ens_tau_selections])
         ens_num_tau_mask = ens_num_taus > 1
         ens_cut_filtered_events = ens_filtered_events[ens_num_tau_mask]
-        '''
+        
         # Need to select visible decay products from events not selected
-        # The following mask does not work because ens_mask_tauh is using eventsnotselected and can't apply that to ens_cut_filtered_events
-        #had_gen_taus = ens_cut_filtered_events.staus_taus[ens_mask_tauh]
-        #ens_gen_had_distinctChildren = had_gen_taus.distinctChildren[(abs(had_gen_taus.distinctChildren.pdgId) != 16)]
-
-
+        lep_gen_taus = ak.any((abs(ens_cut_filtered_events.staus_taus.distinctChildren.pdgId) == 11) | (abs(ens_cut_filtered_events.staus_taus.distinctChildren.pdgId) == 13), axis=-1)
+        had_gen_taus = ~lep_gen_taus
+        had_gen_taus = ens_cut_filtered_events.staus_taus[had_gen_taus]
+        ens_gen_had_visibleChildren = had_gen_taus.distinctChildren[(abs(had_gen_taus.distinctChildren.pdgId) != 16)]
+        ens_gen_had_visibleChildren = had_gen_taus.distinctChildren[ak.sum(ens_gen_had_visibleChildren.pt, axis=-1) > 10]
+        '''
         ################################################################################################################
         # Plotting script
         ################################################################################################################
-
-        Lxy_axis = axis.Regular(30, 0, 30, name="Lxy", label="Lxy [cm]")
+        '''
+        Lxy_axis = axis.Regular(50, 0, 100, name="Lxy", label="Lxy [cm]")
 
         hist_Lxy_den = Hist(Lxy_axis)
         hist_Lxy_num = Hist(Lxy_axis)
 
         hist_Lxy_den.fill(ak.flatten(cut_filtered_events.GenVisStauTaus.parent.Lxy.compute(), axis=None))
+        #hist_Lxy_den.fill(ak.flatten(ens_gen_had_visibleChildren.parent.Lxy.compute(), axis=None))
         hist_Lxy_num.fill(ak.flatten(GenVisTau_matched_to_jet.parent.Lxy.compute()))
 
         plt.clf()
@@ -239,3 +242,93 @@ if __name__ == '__main__':
         plt.ylabel("Efficiency")
         plt.grid(True)
         plt.savefig(os.path.join(output_dir, f"eff_vs_Lxy_{sample_name}.pdf"))
+        
+        edges = [1e-4, 1e-3, 1e-2, 1, 5, 10, 15, 20, 25, 30, 40, 50, 100]
+
+        Lxy_axis = axis.Variable(edges, name="Lxy", label="Lxy [cm]")
+
+        hist_Lxy_den = Hist(Lxy_axis)
+        hist_Lxy_num = Hist(Lxy_axis)
+
+        hist_Lxy_den.fill(ak.flatten(cut_filtered_events.GenVisStauTaus.parent.Lxy.compute(), axis=None))
+        hist_Lxy_num.fill(ak.flatten(GenVisTau_matched_to_jet.parent.Lxy.compute(), axis=None))
+
+        plt.figure()
+        plot_efficiency(hist_Lxy_num, hist_Lxy_den, log=True)
+        plt.xlim(edges[0], edges[-1])          
+        plt.ylim(0.0, 1.05)
+        plt.xlabel("Lxy [cm]")
+        plt.title(f"Jet–GenVisStauTaus efficiency vs Lxy : {sample_name}")
+        plt.grid(True, which="both", ls="--", alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, f"eff_vs_Lxy_{sample_name}.pdf"))
+        plt.close()
+        '''
+        display_edges = [
+            1, 3, 6.5, 10, 15, 20, 30, 40, 50, 100       
+        ]
+        display_axis   = axis.Variable(display_edges, flow=False, name="Lxy", label="Lxy [cm]")
+        den_display = Hist(display_axis)
+        num_display = Hist(display_axis)
+
+        den_display.fill(ak.flatten(cut_filtered_events.GenVisStauTaus.parent.Lxy.compute(), axis=None))  
+        num_display.fill(ak.flatten(GenVisTau_matched_to_jet.parent.Lxy.compute(), axis=None)) 
+
+        fig, ax = plt.subplots(figsize=(6,4))
+
+        num_display.plot1d(ax=ax, histtype="step", label="Numerator",   lw=1.5)
+        den_display.plot1d(ax=ax, histtype="step", label="Denominator", lw=1.5)
+
+        ax.set_xlabel("Lxy [cm]")
+        ax.set_ylabel("Entries per bin")
+        ax.set_title(f"Counts vs Lxy : {sample_name}")
+        ax.grid(True, which="both", ls="--", alpha=0.3)
+        ax.legend()
+        fig.tight_layout()
+        fig.savefig(os.path.join(output_dir, f"reg_counts_vs_Lxy_{sample_name}.pdf"))
+        plt.close(fig)
+        '''
+        output_dir = "eta_efficiency_plots"
+        eta_axis = axis.Regular(26, -2.5, 2.5, name="Lxy", label="Lxy [cm]")
+
+        hist_eta_den = Hist(eta_axis)
+        hist_eta_num = Hist(eta_axis)
+
+        hist_eta_den.fill(ak.flatten(cut_filtered_events.GenVisStauTaus.eta.compute(), axis=None))
+        hist_eta_num.fill(ak.flatten(GenVisTau_matched_to_jet.eta.compute()))
+
+        plt.clf()
+        plot_efficiency(hist_eta_num, hist_eta_den)
+        plt.title(f"Jet matched to GenVisStauTaus Efficiency vs eta: {sample_name}")
+        plt.xlabel("eta")
+        plt.ylabel("Efficiency")
+        plt.grid(True)
+        plt.savefig(os.path.join(output_dir, f"eff_vs_Lxy_{sample_name}.pdf"))
+
+        mask    = cut_filtered_events.GenVisStauTaus.parent.Lxy > 1.0
+
+        pt_arr  = ak.flatten(cut_filtered_events.GenVisStauTaus.pt[mask]).compute()
+        eta_arr = ak.flatten(cut_filtered_events.GenVisStauTaus.eta[mask]).compute()
+        plot_dir = "tau_Lxy1cm_plots"
+        os.makedirs(plot_dir, exist_ok=True)
+
+        plt.figure()
+        plt.hist(pt_arr, bins=np.linspace(0, 300, 61), histtype='step', lw=1.8)
+        plt.xlabel(r"Gen $\tau_h$ $p_T$ [GeV]")
+        plt.ylabel("Entries")
+        plt.title(f"Gen τ$_h$ with Lxy > 1 cm: {sample_name}")
+        plt.grid(True, ls="--", alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(os.path.join(plot_dir, f"genTau_pt_LxyGT1cm_{sample_name}.pdf"))
+        plt.close()
+
+        plt.figure()
+        plt.hist(eta_arr, bins=np.linspace(-2.5, 2.5, 26), histtype='step', lw=1.8)
+        plt.xlabel(r"Gen $\tau_h$ $\eta$")
+        plt.ylabel("Entries")
+        plt.title(f"Gen τ$_h$ with Lxy > 1 cm: {sample_name}")
+        plt.grid(True, ls="--", alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(os.path.join(plot_dir, f"genTau_eta_LxyGT1cm_{sample_name}.pdf"))
+        plt.close()
+        '''
