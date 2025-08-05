@@ -102,8 +102,8 @@ if __name__ == '__main__':
 
         events = events[(ak.num(events.GenVisStauTaus) > 0)]
 
-        events['GenMuon'] = gpart[(abs(gpart.pdgId) == 13) & (gpart.hasFlags("isLastCopy"))] 
-        events.GenMuon = events.GenMuon[(events.GenMuon.pt > 20) & (abs(events.GenMuon.eta) < 2.4)]
+        #events['GenMuon'] = gpart[(abs(gpart.pdgId) == 13) & (gpart.hasFlags("isLastCopy"))] 
+        #events.GenMuon = events.GenMuon[(events.GenMuon.pt > 20) & (abs(events.GenMuon.eta) < 2.4)]
 
         events['staus_taus'] = ak.firsts(events.staus_taus[ak.argsort(events.staus_taus.pt, ascending=False)], axis = 2)
         staus_taus = events['staus_taus']
@@ -202,10 +202,7 @@ if __name__ == '__main__':
         bins = np.linspace(0, 1, 50)
 
         plt.hist(score_matched_2nd_jet, bins=bins, histtype='step', lw=2, label='2nd Score (matched)', color='tab:blue')
-
-        # Score of highest scoring jet not matched (no GenVisStauTau in event)
-        scores_not_matched_top = ak.flatten(jets_not_matched.disTauTag_score1.compute())
-        plt.hist(scores_not_matched_top, bins=bins, histtype='step', lw=2, label='Top Score (no match)', color='tab:orange')
+        plt.hist(score_top_jet_in_matched_to_2nd, bins=bins, histtype='step', lw=2, label='Top Score (no match)', color='tab:orange')
 
         # Score difference between matched 2nd and top jet
         plt.hist(score_diff, bins=bins, histtype='step', lw=2, label='|2nd - Top Score|', color='tab:green')
