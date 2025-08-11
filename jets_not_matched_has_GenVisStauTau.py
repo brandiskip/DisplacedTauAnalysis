@@ -64,6 +64,8 @@ os.makedirs("jets_not_matched_isTight_has_GenVisStauTau", exist_ok=True)
 os.makedirs("jets_not_matched_isTight_has_no_GenVisStauTau", exist_ok=True)
 
 os.makedirs("jets_2nd_highest_score_matched_GenVisStauTau", exist_ok=True)
+output_dir_dR = "dR_between_jets"
+os.makedirs(output_dir_dR, exist_ok=True)
 
 # ----------------------------------------------------------------------
 # Main loop: Process each sample and produce histograms.
@@ -185,9 +187,28 @@ if __name__ == '__main__':
         #jets_not_matched_second_highest_score = second_highest_score_jets[delta_r_mask(second_highest_score_jets, cut_filtered_events.GenVisStauTaus, 0.4)]
 
         is_matched_to_second = ak.num(jets_matched_second_highest_score) > 0
-        score_matched_2nd_jet = ak.flatten(second_highest_score_jets[is_matched_to_second].disTauTag_score1.compute())
-        score_top_jet_in_matched_to_2nd = ak.flatten(highest_score_jets[is_matched_to_second].disTauTag_score1.compute())
+        #score_matched_2nd_jet = ak.flatten(second_highest_score_jets[is_matched_to_second].disTauTag_score1.compute())
+        #score_top_jet_in_matched_to_2nd = ak.flatten(highest_score_jets[is_matched_to_second].disTauTag_score1.compute())
 
+        score_matched_2nd_jet = second_highest_score_jets[is_matched_to_second]
+        score_top_jet_in_matched_to_2nd = highest_score_jets[is_matched_to_second]
+
+        dR_between_jets = score_matched_2nd_jet.metric_table(score_top_jet_in_matched_to_2nd)
+
+        bins = np.arange(0, 4, 0.1)
+
+        plt.hist(ak.flatten(dR_between_jets).compute(), bins=bins, histtype='step', lw=2)
+
+        plt.xlabel("dR")
+        plt.ylabel("Counts")
+        plt.title("dR between highest score and 2nd highest")
+        plt.grid(True, ls="--", alpha=0.5)
+        plt.tight_layout()
+        plt.savefig(f"{output_dir_dR}/dR_between_jets_{sample_name}.pdf")
+        plt.close()
+
+
+        '''
         #has_gen_vis_stau_tau = ak.num(cut_filtered_events.GenVisStauTaus) > 0
         has_no_gen_vis_stau_tau = ak.num(cut_filtered_events.GenVisStauTaus) == 0
         has_unmatched_jet = ak.num(jets_not_matched) > 0
@@ -215,6 +236,8 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.savefig(f"jets_2nd_highest_score_matched_GenVisStauTau/{sample_name}_ScoreComparison_AllCurves.pdf")
         plt.close()
+        '''
+
 
         '''
         plt.hist(score_diff, bins=bins, histtype='step', lw=2, label='|2nd - Top Score|')
