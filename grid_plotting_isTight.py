@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
+from matplotlib.colors import LogNorm
 import hist
 import vector
 from hist import Hist, axis, intervals
@@ -26,16 +27,16 @@ filenames = {
     #'Stau_200_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     #'Stau_300_0p01mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-0p01mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     #'Stau_300_0p1mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-0p1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_300_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_300_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_300_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_300_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_300_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_300_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_300_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     #'Stau_500_0p01mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-0p01mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     #'Stau_500_0p1mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-0p1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_500_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_500_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_500_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_500_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_500_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_500_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_500_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_500_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
 }
 
 PFNanoAODSchema.mixins["DisMuon"] = "Muon"
@@ -99,12 +100,15 @@ if __name__ == '__main__':
                                                         (abs(events.GenVisTau.parent.distinctParent.pdgId) == 1000015) & \
                                                         (events.GenVisTau.parent.distinctParent.hasFlags("isLastCopy")) & \
                                                         (events.GenVisTau.parent.hasFlags("fromHardProcess")) & \
-                                                        (events.GenVisTau.parent.Lxy < 100.0)]
+                                                        (events.GenVisTau.parent.Lxy < 100.0) & \
+                                                        (events.GenVisTau.pt > 20) & \
+                                                        (abs(events.GenVisTau.eta) < 2.4)]
 
         events = events[(ak.num(events.GenVisStauTaus) > 0)]
                                                       
         events['GenMuon'] = events.GenPart[(abs(events.GenPart.pdgId) == 13) & (events.GenPart.hasFlags("isLastCopy"))] 
         events.GenMuon = events.GenMuon[(events.GenMuon.pt > 20) & (abs(events.GenMuon.eta) < 2.4)]
+        events = events[(ak.num(events.GenMuon) > 0)]
 
         events['GenElectron'] = events.GenPart[(abs(events.GenPart.pdgId) == 11) & (events.GenPart.hasFlags("isLastCopy"))] 
         events.GenMuon = events.GenMuon[(events.GenMuon.pt > 20) & (abs(events.GenMuon.eta) < 2.4)]
@@ -137,7 +141,7 @@ if __name__ == '__main__':
         cut_filtered_events = filtered_events[(num_tau_mask)]
 
         # Select GenVisStauTaus with |eta| < 2.4 and pt > 20
-        cut_filtered_events.GenVisStauTaus = cut_filtered_events.GenVisStauTaus[(cut_filtered_events.GenVisStauTaus.pt > 20) & (abs(cut_filtered_events.GenVisStauTaus.eta) < 2.4)]
+        #cut_filtered_events.GenVisStauTaus = cut_filtered_events.GenVisStauTaus[(cut_filtered_events.GenVisStauTaus.pt > 20) & (abs(cut_filtered_events.GenVisStauTaus.eta) < 2.4)]
 
         #jets = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20)]
         
@@ -145,11 +149,62 @@ if __name__ == '__main__':
         # Use these jet selections to trouble shoot looking for how each veto effects efficiency
         jets_all = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20)]
 
-        # add isTight to jets if lepton veto needed
+        # add isTight to jets
         jets_tight = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20) & (cut_filtered_events.Jet.isTight) & (cut_filtered_events.Jet.chHEF > 0.01)]
         
-        # add isTightLeptonVeto to jets if lepton veto needed
+        # add isTightLeptonVeto to jets
         jets_tightLeptonVeto = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20) & (cut_filtered_events.Jet.isTightLeptonVeto) & (cut_filtered_events.Jet.chHEF > 0.01)]
+
+        # ΔR to GenMuon
+        deltaR_muon_all = jets_all.metric_table(cut_filtered_events.GenMuon).compute()
+        deltaR_muon_tight = jets_tight.metric_table(cut_filtered_events.GenMuon).compute()
+        deltaR_muon_tightLeptonVeto = jets_tightLeptonVeto.metric_table(cut_filtered_events.GenMuon).compute()
+
+        # ΔR to GenVisStauTau
+        deltaR_vis_all = jets_all.metric_table(cut_filtered_events.GenVisStauTaus).compute()
+        deltaR_vis_tight = jets_tight.metric_table(cut_filtered_events.GenVisStauTaus).compute()
+        deltaR_vis_tightLeptonVeto = jets_tightLeptonVeto.metric_table(cut_filtered_events.GenVisStauTaus).compute()
+
+        def extract_matched_dRs(dr_muon, dr_vis):
+            # Flatten both arrays
+            dr_muon_flat = ak.flatten(dr_muon, axis=None)
+            dr_vis_flat = ak.flatten(dr_vis, axis=None)
+
+            # Remove None entries
+            dr_muon_masked = dr_muon_flat[~ak.is_none(dr_muon_flat)]
+            dr_vis_masked  = dr_vis_flat[~ak.is_none(dr_vis_flat)]
+
+            # Trim to the same length
+            n = min(len(dr_muon_masked), len(dr_vis_masked))
+
+            x = ak.to_numpy(dr_muon_masked[:n])
+            y = ak.to_numpy(dr_vis_masked[:n])
+
+            return x, y
+
+        # Apply to each jet category
+        x_all, y_all = extract_matched_dRs(deltaR_muon_all, deltaR_vis_all)
+        x_tight, y_tight = extract_matched_dRs(deltaR_muon_tight, deltaR_vis_tight)
+        x_tightLeptonVeto, y_tightLeptonVeto = extract_matched_dRs(deltaR_muon_tightLeptonVeto, deltaR_vis_tightLeptonVeto)
+
+        bins = np.linspace(0, 3.5, 101)
+
+        # Plotting function
+        def plot_2D(x, y, title, fname):
+            plt.figure()
+            plt.hist2d(x, y, bins=[bins, bins], cmap='viridis', norm=LogNorm())
+            plt.xlabel(r'$\Delta R$(jet, GenMuon)')
+            plt.ylabel(r'$\Delta R$(jet, GenVisStauTau)')
+            plt.title(title)
+            plt.colorbar(label="Counts")
+            plt.tight_layout()
+            plt.savefig(os.path.join(out_dir_genmuon, f"{fname}_{sample_name}.pdf"))
+            plt.close()
+
+        # Generate all 2D plots
+        plot_2D(x_all, y_all, r'2D $\Delta R$: All jets', "deltaR2D_AllJets")
+        plot_2D(x_tight, y_tight, r'2D $\Delta R$: isTight jets', "deltaR2D_TightJets")
+        plot_2D(x_tightLeptonVeto, y_tightLeptonVeto, r'2D $\Delta R$: isTightLeptonVeto jets', "deltaR2D_TightLeptonVetoJets")
         '''
         jet_id_vars = {
             "Jet_muEF": jets_all.muEF,
@@ -247,6 +302,7 @@ if __name__ == '__main__':
         ###################################################################################################
         # Plots for deltaR for GenMuon wrt jets
         ###################################################################################################
+        '''
         deltaR_all = jets_all.metric_table(cut_filtered_events.GenMuon).compute()
         deltaR_tight = jets_tight.metric_table(cut_filtered_events.GenMuon).compute()
         deltaR_tightLeptonVeto = jets_tightLeptonVeto.metric_table(cut_filtered_events.GenMuon).compute()
@@ -254,7 +310,7 @@ if __name__ == '__main__':
         #plt.figure()
         bins = np.linspace(0, 5, 50)
 
-        '''
+        
         plt.hist(ak.ravel(deltaR_all), bins=bins, histtype='step', lw=2, label='All jets')
         plt.hist(ak.ravel(deltaR_tight), bins=bins, histtype='step', lw=2, label='isTight')
         plt.hist(ak.ravel(deltaR_tightLeptonVeto), bins=bins, histtype='step', lw=2, label='isTightLeptonVeto')
@@ -271,6 +327,7 @@ if __name__ == '__main__':
         ###################################################################################################
         # Plots for deltaR for GenVisStauTau wrt jets
         ###################################################################################################
+        '''
         deltaR_vis_all = jets_all.metric_table(cut_filtered_events.GenVisStauTaus).compute()
         deltaR_vis_tight = jets_tight.metric_table(cut_filtered_events.GenVisStauTaus).compute()
         deltaR_vis_tightLeptonVeto = jets_tightLeptonVeto.metric_table(cut_filtered_events.GenVisStauTaus).compute()
@@ -282,8 +339,6 @@ if __name__ == '__main__':
         deltaR_vis_all = ak.broadcast_arrays(deltaR_vis_all, deltaR_all)
         deltaR_vis_tight = ak.broadcast_arrays(deltaR_vis_tight, deltaR_tight)
         deltaR_vis_tightLeptonVeto = ak.broadcast_arrays(deltaR_vis_tightLeptonVeto, deltaR_tightLeptonVeto)
-
-        print("broadcast_arrays succesful")
 
         plt.figure()
         plt.hist2d(ak.ravel(deltaR_all), ak.ravel(deltaR_vis_all), bins=[bins, bins], cmap='viridis')
@@ -314,7 +369,7 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.savefig(os.path.join(out_dir_genmuon, f"deltaR2D_TightLeptonVetoJets_{sample_name}.pdf"))
         plt.close()
-        '''
+        
         # Plot
         plt.figure()
         bins = np.linspace(0, 5, 50)
