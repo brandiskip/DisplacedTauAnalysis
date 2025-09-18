@@ -18,22 +18,22 @@ np.set_printoptions(precision=6, suppress=False, threshold=np.inf)
 
 # Load the file
 filenames = {
-    'Stau_100_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_100_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_100_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_100_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_200_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_200_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_200_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_200_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_300_1mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_300_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_100_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_100_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_100_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_100_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_200_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_200_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_200_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_200_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_300_1mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_300_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_300_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_300_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_500_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_500_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_500_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_500_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_300_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_500_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_500_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_500_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_500_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
 }
 
 PFNanoAODSchema.mixins["DisMuon"] = "Muon"
@@ -64,8 +64,60 @@ os.makedirs("jets_not_matched_isTight_has_GenVisStauTau", exist_ok=True)
 os.makedirs("jets_not_matched_isTight_has_no_GenVisStauTau", exist_ok=True)
 
 os.makedirs("jets_2nd_highest_score_matched_GenVisStauTau", exist_ok=True)
+
 output_dir_dR = "dR_between_jets"
 os.makedirs(output_dir_dR, exist_ok=True)
+
+output_dir_partonFlavour = "partonFlavour_jets"
+os.makedirs(output_dir_partonFlavour, exist_ok=True)
+
+def _to_np_flat(arr):
+    # Works for awkward and dask-awkward
+    if hasattr(arr, "compute"):
+        arr = arr.compute()
+    return ak.to_numpy(ak.flatten(arr, axis=None))
+
+def _overlay_two_1d(a1, a2, bins, rng, xlabel, title, outpath, l1="highest (not matched)", l2="second (matched)"):
+    x1 = _to_np_flat(a1)
+    x2 = _to_np_flat(a2)
+    plt.figure()
+    plt.hist(x1, bins=bins, range=rng, histtype="step", lw=2, label=l1)
+    plt.hist(x2, bins=bins, range=rng, histtype="step", lw=2, label=l2)
+    plt.xlabel(xlabel)
+    plt.ylabel("Counts")
+    plt.title(title)
+    plt.grid(True, ls="--", alpha=0.5)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(outpath)
+    plt.close()
+
+# ---------- what to plot (field, bins, (min,max), label) ----------
+plots = [
+    ("pt",                 60, (0, 750),     r"Jet $p_T$ [GeV]"),
+    ("eta",                60, (-2.5, 2.5),  r"Jet $\eta$"),
+    ("phi",                64, (-3.2, 3.2),  r"Jet $\phi$"),
+    ("mass",               60, (0, 120),     "Jet mass [GeV]"),
+    ("area",               50, (0, 1.5),     "Jet area"),
+    ("disTauTag_score1",   50, (0, 1.0),     "disTauTag_score1"),
+    ("disTauTag_score0",   50, (0, 1.0),     "disTauTag_score0"),
+    ("btagPNetTauVJet",    50, (0, 1.0),     "btagPNetTauVJet"),
+    ("btagDeepFlavQG",     50, (0, 1.0),     "btagDeepFlavQG"),
+    ("btagPNetQvG",        50, (0, 1.0),     "btagPNetQvG"),
+    ("muEF",               50, (0, 0.8),     "muEF"),
+    ("chHEF",              50, (0, 1.0),     "chHEF"),
+    ("neHEF",              50, (0, 1.0),     "neHEF"),
+    ("chEmEF",             50, (0, 1.0),     "chEmEF"),
+    ("neEmEF",             50, (0, 1.0),     "neEmEF"),
+    ("nConstituents",      80, (0, 80),      "nConstituents"),
+    ("chMultiplicity",     60, (0, 60),      "chMultiplicity"),
+    ("neMultiplicity",     60, (0, 60),      "neMultiplicity"),
+    ("qgl",                50, (0, 1.0),     "qgl"),
+    ("puIdDisc",           60, (-1, 1),      "puIdDisc"),
+    ("puId",                8, (-0.5, 7.5),  "puId"),
+    ("jetId",               8, (-0.5, 7.5),  "jetId"),
+    ("dxy",                60, (0, 0.5),     "pf d0 (dxy)"),
+]
 
 # ----------------------------------------------------------------------
 # Main loop: Process each sample and produce histograms.
@@ -83,10 +135,7 @@ if __name__ == '__main__':
         parent_with_Lxy = ak.with_field(events.GenVisTau.parent, Lxy, where="Lxy")
         events['GenVisTau'] = ak.with_field(events.GenVisTau, parent_with_Lxy, where="parent")
 
-        events.Muon = events.Muon[(events.Muon.pt > 20) & (abs(events.Muon.eta) < 2.4) & (events.Muon.looseId == 1)]
-        events.DisMuon = events.DisMuon[(events.DisMuon.pt > 20) & (abs(events.DisMuon.eta) < 2.4) & (events.DisMuon.looseId == 1)]
-        events.Electron = events.Electron[(events.Electron.pt > 20) & (abs(events.Electron.eta) < 2.4) & (events.Electron.convVeto)]
-        events.Photon = events.Photon[(events.Photon.pt > 20) & (abs(events.Photon.eta) < 2.4) & (events.Photon.electronVeto)]
+        events['Muon'] = events.Muon[(events.Muon.pt > 20) & (abs(events.Muon.eta) < 2.4) & (events.Muon.looseId == 1)]
         
         ## find staus and their tau children
         gpart = events.GenPart
@@ -100,7 +149,9 @@ if __name__ == '__main__':
                                                         (abs(events.GenVisTau.parent.distinctParent.pdgId) == 1000015) & \
                                                         (events.GenVisTau.parent.distinctParent.hasFlags("isLastCopy")) & \
                                                         (events.GenVisTau.parent.hasFlags("fromHardProcess")) & \
-                                                        (events.GenVisTau.parent.Lxy < 100.0)]
+                                                        (events.GenVisTau.parent.Lxy < 100.0) & \
+                                                        (events.GenVisTau.pt > 20) & \
+                                                        (abs(events.GenVisTau.eta) < 2.4)]
 
         events = events[(ak.num(events.GenVisStauTaus) > 0)]
 
@@ -123,17 +174,44 @@ if __name__ == '__main__':
         num_tau_mask = num_taus > 1
         cut_filtered_events = filtered_events[num_tau_mask]
 
-        # Select GenVisStauTaus with |eta| < 2.4 and pt > 20
-        cut_filtered_events.GenVisStauTaus = cut_filtered_events.GenVisStauTaus[(cut_filtered_events.GenVisStauTaus.pt > 20) & (abs(cut_filtered_events.GenVisStauTaus.eta) < 2.4)]
-        
-        # add isTight to jets if lepton veto needed
-        #jets = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20) & (cut_filtered_events.Jet.isTight) & (cut_filtered_events.Jet.chHEF > 0.01)]
+        jets = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & \
+                                            (cut_filtered_events.Jet.pt > 20) & \
+                                            (cut_filtered_events.Jet.isTightLeptonVeto)]
 
-        # add isTightLeptonVeto to jets if lepton veto needed
-        jets = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20) & (cut_filtered_events.Jet.isTightLeptonVeto) & (cut_filtered_events.Jet.chHEF > 0.01)]
+        has_2_jets = ak.num(jets) == 2
+        jets_2j = jets[has_2_jets]
+        cut_filtered_events_2j = cut_filtered_events[has_2_jets]
+
+        sorted_by_score_2j = jets_2j[ak.argsort(jets_2j.disTauTag_score1, ascending=False)]
+        highest_score_jets = ak.singletons(sorted_by_score_2j[:, 0])
+        second_highest_score_jets = ak.singletons(sorted_by_score_2j[:, 1])
+
+        highest_not_matched_mask = delta_r_mask(highest_score_jets, cut_filtered_events_2j.GenVisStauTaus, 0.4) 
+        second_not_matched_mask  = delta_r_mask(second_highest_score_jets, cut_filtered_events_2j.GenVisStauTaus, 0.4)
+
+        evt_keep = ak.flatten(highest_not_matched_mask & (~second_not_matched_mask), axis=1)
+
+        highest_not_matched = ak.firsts(highest_score_jets[evt_keep])              
+        second_matched      = ak.firsts(second_highest_score_jets[evt_keep])
+
+        sample_out = os.path.join("compare_highestNotMatched_vs_secondMatched", sample_name)
+        os.makedirs(sample_out, exist_ok=True)
+
+        for field, nb, rng, xlabel in plots:
+            if hasattr(highest_not_matched, field) and hasattr(second_matched, field):
+                _overlay_two_1d(
+                    getattr(highest_not_matched, field),
+                    getattr(second_matched, field),
+                    bins=nb,
+                    rng=rng,
+                    xlabel=xlabel,
+                    title=f"{sample_name}: highest(not matched) vs second(matched) — {field}",
+                    outpath=os.path.join(sample_out, f"{sample_name}_{field}.pdf"),
+                )
+
+
         #jets = jets[jets.disTauTag_score1 > 0.90]
 
-        # Use these jet selections to trouble shoot looking for how each veto effects efficiency
         #jets_all = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20) & (cut_filtered_events.Jet.disTauTag_score1 > 0.9)]
 
         # add isTight to jets if lepton veto needed
@@ -165,16 +243,14 @@ if __name__ == '__main__':
         plt.savefig(os.path.join(out_dir_genmuon_high_score, f"deltaR_GenMuon_{sample_name}.pdf"))
         plt.close()
         '''
+
+        '''
         # Sort the selected jets by disTauTag_score1 (descending) and take the first jet per event
         sorted_by_score = jets[ak.argsort(jets.disTauTag_score1, ascending=False)]
         highest_score_jets = ak.singletons(ak.firsts(sorted_by_score))
 
         jets_matched = cut_filtered_events.GenVisStauTaus.nearest(highest_score_jets, threshold=0.4)
         jets_not_matched = highest_score_jets[delta_r_mask(highest_score_jets, cut_filtered_events.GenVisStauTaus,   0.4)]
-
-        has_2_or_more_jets = ak.num(sorted_by_score) >= 2
-        sorted_by_score_2j = sorted_by_score[has_2_or_more_jets]
-        cut_filtered_events_2j = cut_filtered_events[has_2_or_more_jets]
 
         # Get the second highest scoring jet per event
         second_highest_score_jets = ak.singletons(sorted_by_score_2j[:, 1])
@@ -193,6 +269,21 @@ if __name__ == '__main__':
         score_matched_2nd_jet = second_highest_score_jets[is_matched_to_second]
         score_top_jet_in_matched_to_2nd = highest_score_jets[is_matched_to_second]
 
+        bins = np.arange(0, 25, 1)
+        plt.hist(ak.flatten(score_top_jet_in_matched_to_2nd.partonFlavour).compute(), bins=bins, histtype='step', lw=2, label='Highest Score (not matched)', color='tab:blue')
+        plt.hist(ak.flatten(score_matched_2nd_jet.partonFlavour).compute(), bins=bins, histtype='step', lw=2, label='2nd Score (matched)', color='tab:orange')
+
+        plt.xlabel("partonFlavour pdgId")
+        plt.ylabel("Counts")
+        plt.title("Jet Score Parton Flavour Comparison")
+        plt.legend()
+        plt.grid(True, ls="--", alpha=0.5)
+        plt.tight_layout()
+        plt.savefig(f"{output_dir_partonFlavour}/partonFlavour_jets_{sample_name}.pdf")
+        plt.close()
+        '''
+        
+        '''
         dR_between_jets = score_matched_2nd_jet.metric_table(score_top_jet_in_matched_to_2nd)
 
         bins = np.arange(0, 4, 0.1)
@@ -206,7 +297,7 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.savefig(f"{output_dir_dR}/dR_between_jets_{sample_name}.pdf")
         plt.close()
-
+        '''
 
         '''
         #has_gen_vis_stau_tau = ak.num(cut_filtered_events.GenVisStauTaus) > 0
