@@ -92,31 +92,63 @@ def _overlay_two_1d(a1, a2, bins, rng, xlabel, title, outpath, l1="highest (not 
     plt.savefig(outpath)
     plt.close()
 
+def _hist2d_pair(xarr, yarr, bins, rng, xlabel, title, outpath, log=True):
+    # flatten + (dask-)awkward -> numpy
+    if hasattr(xarr, "compute"): xarr = xarr.compute()
+    if hasattr(yarr, "compute"): yarr = yarr.compute()
+    x = ak.to_numpy(ak.flatten(xarr, axis=None))
+    y = ak.to_numpy(ak.flatten(yarr, axis=None))
+
+    # keep finite
+    m = np.isfinite(x) & np.isfinite(y)
+    x = x[m]; y = y[m]
+    if x.size == 0 or y.size == 0:
+        print(f"[warn] empty for {title}, skipping.")
+        return
+
+    plt.figure()
+    plt.hist2d(
+        x, y,
+        bins=[bins, bins],            # same binning for x & y
+        range=[rng, rng],             # same ranges for x & y
+        norm=mcolors.LogNorm() if log else None,
+    )
+    # diagonal reference
+    plt.plot([rng[0], rng[1]], [rng[0], rng[1]], ls="--", lw=1, color="k")
+    plt.xlabel(f"{xlabel} (highest not matched)")
+    plt.ylabel(f"{xlabel} (second matched)")
+    plt.title(title)
+    cbar = plt.colorbar()
+    cbar.set_label("Counts")
+    plt.tight_layout()
+    plt.savefig(outpath)
+    plt.close()
+
 # ---------- what to plot (field, bins, (min,max), label) ----------
 plots = [
-    ("pt",                 60, (0, 750),     r"Jet $p_T$ [GeV]"),
-    ("eta",                60, (-2.5, 2.5),  r"Jet $\eta$"),
-    ("phi",                64, (-3.2, 3.2),  r"Jet $\phi$"),
-    ("mass",               60, (0, 120),     "Jet mass [GeV]"),
-    ("area",               50, (0, 1.5),     "Jet area"),
-    ("disTauTag_score1",   50, (0, 1.0),     "disTauTag_score1"),
-    ("disTauTag_score0",   50, (0, 1.0),     "disTauTag_score0"),
-    ("btagPNetTauVJet",    50, (0, 1.0),     "btagPNetTauVJet"),
-    ("btagDeepFlavQG",     50, (0, 1.0),     "btagDeepFlavQG"),
-    ("btagPNetQvG",        50, (0, 1.0),     "btagPNetQvG"),
-    ("muEF",               50, (0, 0.8),     "muEF"),
-    ("chHEF",              50, (0, 1.0),     "chHEF"),
-    ("neHEF",              50, (0, 1.0),     "neHEF"),
-    ("chEmEF",             50, (0, 1.0),     "chEmEF"),
-    ("neEmEF",             50, (0, 1.0),     "neEmEF"),
-    ("nConstituents",      80, (0, 80),      "nConstituents"),
-    ("chMultiplicity",     60, (0, 60),      "chMultiplicity"),
-    ("neMultiplicity",     60, (0, 60),      "neMultiplicity"),
-    ("qgl",                50, (0, 1.0),     "qgl"),
-    ("puIdDisc",           60, (-1, 1),      "puIdDisc"),
-    ("puId",                8, (-0.5, 7.5),  "puId"),
-    ("jetId",               8, (-0.5, 7.5),  "jetId"),
-    ("dxy",                60, (0, 0.5),     "pf d0 (dxy)"),
+    #("pt",                 60, (0, 750),     r"Jet $p_T$ [GeV]"),
+    #("eta",                60, (-2.5, 2.5),  r"Jet $\eta$"),
+    #("phi",                64, (-3.2, 3.2),  r"Jet $\phi$"),
+    #("mass",               60, (0, 120),     "Jet mass [GeV]"),
+    #("area",               50, (0, 1.5),     "Jet area"),
+    #("disTauTag_score1",   50, (0, 1.0),     "disTauTag_score1"),
+    #("disTauTag_score0",   50, (0, 1.0),     "disTauTag_score0"),
+    #("btagPNetTauVJet",    50, (0, 1.0),     "btagPNetTauVJet"),
+    #("btagDeepFlavQG",     50, (0, 1.0),     "btagDeepFlavQG"),
+    #("btagPNetQvG",        50, (0, 1.0),     "btagPNetQvG"),
+    #("muEF",               50, (0, 0.8),     "muEF"),
+    #("chHEF",              50, (0, 1.0),     "chHEF"),
+    #("neHEF",              50, (0, 1.0),     "neHEF"),
+    #("chEmEF",             50, (0, 1.0),     "chEmEF"),
+    #("neEmEF",             50, (0, 1.0),     "neEmEF"),
+    #("nConstituents",      80, (0, 80),      "nConstituents"),
+    #("chMultiplicity",     60, (0, 60),      "chMultiplicity"),
+    #("neMultiplicity",     60, (0, 60),      "neMultiplicity"),
+    #("qgl",                50, (0, 1.0),     "qgl"),
+    #("puIdDisc",           60, (-1, 1),      "puIdDisc"),
+    #("puId",                8, (-0.5, 7.5),  "puId"),
+    #("jetId",               8, (-0.5, 7.5),  "jetId"),
+    ("dxy",                100, (-1000, 1000),     "dxy"),
 ]
 
 # ----------------------------------------------------------------------
@@ -127,15 +159,14 @@ if __name__ == '__main__':
         print(f"Processing sample: {sample_name}")
         # add dxy to jet fields
         charged_sel = events.Jet.constituents.pf.charge != 0
-        dxy = ak.flatten(events.Jet.constituents.pf[ak.argmax(events.Jet.constituents.pf[charged_sel].pt, axis=2, keepdims=True)].d0, axis = 2)
+        dxy = abs(ak.where(ak.all(events.Jet.constituents.pf.charge == 0, axis = -1), -999, \
+                ak.flatten(events.Jet.constituents.pf[ak.argmax(events.Jet.constituents.pf[charged_sel].pt, axis=2, keepdims=True)].d0, axis = 2)))
         events['Jet'] = ak.with_field(events.Jet, dxy, where="dxy")
         vx = events.GenVisTau.parent.vx - events.GenVisTau.parent.parent.vx
         vy = events.GenVisTau.parent.vy - events.GenVisTau.parent.parent.vy
         Lxy = np.sqrt(vx**2 + vy**2)
         parent_with_Lxy = ak.with_field(events.GenVisTau.parent, Lxy, where="Lxy")
         events['GenVisTau'] = ak.with_field(events.GenVisTau, parent_with_Lxy, where="parent")
-
-        events['Muon'] = events.Muon[(events.Muon.pt > 20) & (abs(events.Muon.eta) < 2.4) & (events.Muon.looseId == 1)]
         
         ## find staus and their tau children
         gpart = events.GenPart
@@ -153,10 +184,10 @@ if __name__ == '__main__':
                                                         (events.GenVisTau.pt > 20) & \
                                                         (abs(events.GenVisTau.eta) < 2.4)]
 
-        events = events[(ak.num(events.GenVisStauTaus) > 0)]
+        #events = events[(ak.num(events.GenVisStauTaus) > 0)]
 
-        #events['GenMuon'] = gpart[(abs(gpart.pdgId) == 13) & (gpart.hasFlags("isLastCopy"))] 
-        #events.GenMuon = events.GenMuon[(events.GenMuon.pt > 20) & (abs(events.GenMuon.eta) < 2.4)]
+        events['GenMuon'] = gpart[(abs(gpart.pdgId) == 13) & (gpart.hasFlags("isLastCopy"))] 
+        events['GenMuon'] = events.GenMuon[(events.GenMuon.pt > 20) & (abs(events.GenMuon.eta) < 2.4)]
 
         events['staus_taus'] = ak.firsts(events.staus_taus[ak.argsort(events.staus_taus.pt, ascending=False)], axis = 2)
         staus_taus = events['staus_taus']
@@ -194,6 +225,30 @@ if __name__ == '__main__':
         highest_not_matched = ak.firsts(highest_score_jets[evt_keep])              
         second_matched      = ak.firsts(second_highest_score_jets[evt_keep])
 
+        '''
+        highest_not_matched = highest_not_matched[highest_not_matched.muEF > 0.5]
+        genmuon_kept = cut_filtered_events_2j.GenMuon[evt_keep]
+        mu_mask = (highest_not_matched.muEF > 0.5)
+
+        jets_hi_mu = highest_not_matched[mu_mask]   
+        muons_mu   = genmuon_kept[mu_mask]
+
+        dR_GenMuon = jets_hi_mu.metric_table(muons_mu)
+
+        arr = dR_GenMuon.compute() if hasattr(dR_GenMuon, "compute") else dR_GenMuon
+        arr = ak.fill_none(arr, np.nan)
+        x = ak.to_numpy(ak.firsts(ak.firsts(arr)))
+
+        plt.figure()
+        plt.hist(x, bins=60, range=(0, 5.0), histtype="step", lw=2)
+        plt.xlabel(r"$\Delta R(\mathrm{jet}, \mu)$")
+        plt.ylabel("Counts")
+        plt.title(f"{sample_name}: ΔR(jet, GenMuon)")
+        plt.grid(True, ls="--", alpha=0.5)
+        plt.tight_layout()
+        plt.savefig(os.path.join(sample_out, f"{sample_name}_dR_jet_GenMuon.pdf"))
+        plt.close()
+        '''
         sample_out = os.path.join("compare_highestNotMatched_vs_secondMatched", sample_name)
         os.makedirs(sample_out, exist_ok=True)
 
@@ -209,6 +264,24 @@ if __name__ == '__main__':
                     outpath=os.path.join(sample_out, f"{sample_name}_{field}.pdf"),
                 )
 
+        '''
+        sample_out2d = os.path.join("compare_highestNotMatched_vs_secondMatched_2D", sample_name)
+        os.makedirs(sample_out2d, exist_ok=True)
+
+        # make the 2D histograms
+        for field, nb, rng, xlabel in plots:
+            if hasattr(highest_not_matched, field) and hasattr(second_matched, field):
+                _hist2d_pair(
+                    getattr(highest_not_matched, field),
+                    getattr(second_matched, field),
+                    bins=nb,
+                    rng=rng,
+                    xlabel=xlabel,
+                    title=f"{sample_name}: 2D — {field}",
+                    outpath=os.path.join(sample_out2d, f"{sample_name}_{field}_2D.pdf"),
+                    log=True,
+                )
+        '''
 
         #jets = jets[jets.disTauTag_score1 > 0.90]
 
