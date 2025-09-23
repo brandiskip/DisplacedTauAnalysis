@@ -136,6 +136,8 @@ if __name__ == '__main__':
         charged_sel = events.Jet.constituents.pf.charge != 0
         dxy = ak.flatten(events.Jet.constituents.pf[ak.argmax(events.Jet.constituents.pf[charged_sel].pt, axis=2, keepdims=True)].d0, axis = 2)
         events['Jet'] = ak.with_field(events.Jet, dxy, where="dxy")
+        dxy_err = abs(ak.flatten(events.Jet.constituents.pf[ak.argmax(events.Jet.constituents.pf[charged_sel].pt, axis=2, keepdims=True)].d0Err, axis = 2))
+        events['Jet'] = ak.with_field(events.Jet, dxy_err, where="dxy_err")
         vx = events.GenVisTau.parent.vx - events.GenVisTau.parent.parent.vx
         vy = events.GenVisTau.parent.vy - events.GenVisTau.parent.parent.vy
         Lxy = np.sqrt(vx**2 + vy**2)
@@ -178,6 +180,7 @@ if __name__ == '__main__':
         num_tau_mask = num_taus > 1
         cut_filtered_events = filtered_events[num_tau_mask]
         
+        '''
         jets = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20)]
         jets_neHEF = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20) & (cut_filtered_events.Jet.neHEF < 0.99)]
         jets_neEmEF = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20) & (cut_filtered_events.Jet.neEmEF < 0.9)]
@@ -302,6 +305,7 @@ if __name__ == '__main__':
         plt.legend()
         plt.tight_layout()
         plt.savefig(os.path.join(pT_output_dir, f"eff_vs_pt_overlay_{sample_name}.pdf"))
+        '''
 
         jets = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & \
                                             (cut_filtered_events.Jet.pt > 20)]
@@ -319,6 +323,7 @@ if __name__ == '__main__':
                                                             (cut_filtered_events.Jet.pt > 20) & \
                                                             (cut_filtered_events.Jet.isTightLeptonVeto) & \
                                                             (cut_filtered_events.Jet.chHEF > 0.01)]
+    
         '''
         sorted_by_score = jets[ak.argsort(jets.disTauTag_score1, ascending=False)]
         jets = ak.singletons(ak.firsts(sorted_by_score))
@@ -329,23 +334,37 @@ if __name__ == '__main__':
         sorted_by_score = jets_isTight_chHEF[ak.argsort(jets_isTight_chHEF.disTauTag_score1, ascending=False)]
         jets_isTight_chHEF = ak.singletons(ak.firsts(sorted_by_score))
 
-        sorted_by_score = jets_isTightLeptonVeto[ak.argsort(jets_isTightLeptonVeto.disTauTag_score1, ascending=False)]
-        jets_isTightLeptonVeto = ak.singletons(ak.firsts(sorted_by_score))
+        sorted_by_score = jets_isTightLV_no_chHEF[ak.argsort(jets_isTightLV_no_chHEF.disTauTag_score1, ascending=False)]
+        jets_isTightLV_no_chHEF = ak.singletons(ak.firsts(sorted_by_score))
+
+        sorted_by_score = jets_isTightLV_chHEF[ak.argsort(jets_isTightLV_chHEF.disTauTag_score1, ascending=False)]
+        jets_isTightLV_chHEF = ak.singletons(ak.firsts(sorted_by_score))
         '''
+
+        sorted_by_dxy_err = jets[ak.argsort(jets.dxy_err, ascending=True)]
+        jets = ak.singletons(ak.firsts(sorted_by_dxy_err))
+
+        sorted_by_dxy_err = jets_isTightLV_no_chHEF[ak.argsort(jets_isTightLV_no_chHEF.dxy_err, ascending=True)]
+        jets_isTightLV_no_chHEF = ak.singletons(ak.firsts(sorted_by_dxy_err))
+
+        sorted_by_dxy_err = jets_isTightLV_chHEF[ak.argsort(jets_isTightLV_chHEF.dxy_err, ascending=True)]
+        jets_isTightLV_chHEF = ak.singletons(ak.firsts(sorted_by_dxy_err))
+
         jet_matched_gen_vis_taus = jets.nearest(cut_filtered_events.GenVisStauTaus, threshold=0.4)
         jet_matched_gen_vis_taus = ak.drop_none(jet_matched_gen_vis_taus)
-
+        '''
         jet_matched_gen_vis_taus_isTight_no_chHEF = jets_isTight_no_chHEF.nearest(cut_filtered_events.GenVisStauTaus, threshold=0.4)
         jet_matched_gen_vis_taus_isTight_no_chHEF = ak.drop_none(jet_matched_gen_vis_taus_isTight_no_chHEF)
 
         jet_matched_gen_vis_taus_isTight_chHEF = jets_isTight_chHEF.nearest(cut_filtered_events.GenVisStauTaus, threshold=0.4)
         jet_matched_gen_vis_taus_isTight_chHEF = ak.drop_none(jet_matched_gen_vis_taus_isTight_chHEF)
-
+        '''
         jet_matched_gen_vis_taus_isTightLV_no_chHEF = jets_isTightLV_no_chHEF.nearest(cut_filtered_events.GenVisStauTaus, threshold=0.4)
         jet_matched_gen_vis_taus_isTightLV_no_chHEF = ak.drop_none(jet_matched_gen_vis_taus_isTightLV_no_chHEF)
 
         jet_matched_gen_vis_taus_isTightLV_chHEF = jets_isTightLV_chHEF.nearest(cut_filtered_events.GenVisStauTaus, threshold=0.4)
         jet_matched_gen_vis_taus_isTightLV_chHEF = ak.drop_none(jet_matched_gen_vis_taus_isTightLV_chHEF)
+        
         
         #############################################################################################################################################
         # eta efficiency hists  
@@ -391,7 +410,7 @@ if __name__ == '__main__':
         #############################################################################################################################################
         # d0 efficiency hists  
         #############################################################################################################################################
-        d0_bins = np.arange(0, 15, 1)
+        d0_bins = np.arange(0, 60, 5)
         d0_axis = axis.Variable(d0_bins, name="d0")
         hist_d0_den = Hist(d0_axis)
         hist_d0_num = Hist(d0_axis)
@@ -409,6 +428,7 @@ if __name__ == '__main__':
         }
         _append_histograms_to_json(json_cache, sample_name, "all_jets", _payload)
 
+        '''
         # -------------------- isTight_no_chHEF --------------------
         hist_eta_num_isTight_no_chHEF = Hist(eta_axis)
         hist_eta_num_isTight_no_chHEF.fill(ak.flatten(jet_matched_gen_vis_taus_isTight_no_chHEF.eta, axis=None).compute())
@@ -421,20 +441,22 @@ if __name__ == '__main__':
         hist_pt_num_isTight_no_chHEF = Hist(var_axes['pt'])
         hist_pt_num_isTight_no_chHEF.fill(ak.flatten(jet_matched_gen_vis_taus_isTight_no_chHEF.pt, axis=None).compute())
         _sanitize_inplace(hist_pt_num_isTight_no_chHEF, hist_pt_den)
-
+        
         hist_d0_num_isTight_no_chHEF = Hist(d0_axis)
         hist_d0_num_isTight_no_chHEF.fill(ak.flatten(jet_matched_gen_vis_taus_isTight_no_chHEF.d0, axis=None).compute())
         _sanitize_inplace(hist_d0_num_isTight_no_chHEF, hist_d0_den)
 
         # JSON append
         _payload_isTight_no_chHEF = {
-            "eta": _hist_to_payload(hist_eta_num_isTight_no_chHEF,  hist_eta_den),
-            "Lxy": _hist_to_payload(hist_Lxy_num_isTight_no_chHEF,  hist_Lxy_den),
-            "pt":  _hist_to_payload(hist_pt_num_isTight_no_chHEF,   hist_pt_den),
+            #"eta": _hist_to_payload(hist_eta_num_isTight_no_chHEF,  hist_eta_den),
+            #"Lxy": _hist_to_payload(hist_Lxy_num_isTight_no_chHEF,  hist_Lxy_den),
+            #"pt":  _hist_to_payload(hist_pt_num_isTight_no_chHEF,   hist_pt_den),
             "d0":  _hist_to_payload(hist_d0_num_isTight_no_chHEF,   hist_d0_den),
         }
         _append_histograms_to_json(json_cache, sample_name, "isTight_no_chHEF", _payload_isTight_no_chHEF)
+        '''
 
+        '''
         # -------------------- isTight_chHEF --------------------
         hist_eta_num_isTight_chHEF = Hist(eta_axis)
         hist_eta_num_isTight_chHEF.fill(ak.flatten(jet_matched_gen_vis_taus_isTight_chHEF.eta, axis=None).compute())
@@ -447,18 +469,19 @@ if __name__ == '__main__':
         hist_pt_num_isTight_chHEF = Hist(var_axes['pt'])
         hist_pt_num_isTight_chHEF.fill(ak.flatten(jet_matched_gen_vis_taus_isTight_chHEF.pt, axis=None).compute())
         _sanitize_inplace(hist_pt_num_isTight_chHEF, hist_pt_den)
-
+        
         hist_d0_num_isTight_chHEF = Hist(d0_axis)
         hist_d0_num_isTight_chHEF.fill(ak.flatten(jet_matched_gen_vis_taus_isTight_chHEF.d0, axis=None).compute())
         _sanitize_inplace(hist_d0_num_isTight_chHEF, hist_d0_den)
 
         _payload_isTight_chHEF = {
-            "eta": _hist_to_payload(hist_eta_num_isTight_chHEF,  hist_eta_den),
-            "Lxy": _hist_to_payload(hist_Lxy_num_isTight_chHEF,  hist_Lxy_den),
-            "pt":  _hist_to_payload(hist_pt_num_isTight_chHEF,   hist_pt_den),
+            #"eta": _hist_to_payload(hist_eta_num_isTight_chHEF,  hist_eta_den),
+            #"Lxy": _hist_to_payload(hist_Lxy_num_isTight_chHEF,  hist_Lxy_den),
+            #"pt":  _hist_to_payload(hist_pt_num_isTight_chHEF,   hist_pt_den),
             "d0":  _hist_to_payload(hist_d0_num_isTight_chHEF,   hist_d0_den),
         }
         _append_histograms_to_json(json_cache, sample_name, "isTight_chHEF", _payload_isTight_chHEF)
+        '''
 
         # -------------------- isTightLV_no_chHEF --------------------
         hist_eta_num_isTightLV_no_chHEF = Hist(eta_axis)
@@ -484,8 +507,7 @@ if __name__ == '__main__':
             "d0":  _hist_to_payload(hist_d0_num_isTightLV_no_chHEF,   hist_d0_den),
         }
         _append_histograms_to_json(json_cache, sample_name, "isTightLV_no_chHEF", _payload_isTightLV_no_chHEF)
-
-
+        
         # -------------------- isTightLV_chHEF --------------------
         hist_eta_num_isTightLV_chHEF = Hist(eta_axis)
         hist_eta_num_isTightLV_chHEF.fill(ak.flatten(jet_matched_gen_vis_taus_isTightLV_chHEF.eta, axis=None).compute())
@@ -510,7 +532,6 @@ if __name__ == '__main__':
             "d0":  _hist_to_payload(hist_d0_num_isTightLV_chHEF,   hist_d0_den),
         }
         _append_histograms_to_json(json_cache, sample_name, "isTightLV_chHEF", _payload_isTightLV_chHEF)
-
 
         '''
         # --- JETS (category="jets") ---
