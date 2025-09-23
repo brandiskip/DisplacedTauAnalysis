@@ -77,6 +77,7 @@ def _to_np_flat(arr):
         arr = arr.compute()
     return ak.to_numpy(ak.flatten(arr, axis=None))
 
+'''
 def _overlay_two_1d(a1, a2, bins, rng, xlabel, title, outpath, l1="highest (not matched)", l2="second (matched)"):
     x1 = _to_np_flat(a1)
     x2 = _to_np_flat(a2)
@@ -91,6 +92,23 @@ def _overlay_two_1d(a1, a2, bins, rng, xlabel, title, outpath, l1="highest (not 
     plt.tight_layout()
     plt.savefig(outpath)
     plt.close()
+'''
+def _overlay_two_1d(a1, a2, bins, rng, xlabel, title, outpath,
+                    l1="highest (not matched)", l2="second (matched)",
+                    return_counts=False):
+    x1 = _to_np_flat(a1)
+    x2 = _to_np_flat(a2)
+
+    plt.figure()
+    n1, be1, _ = plt.hist(x1, bins=bins, range=rng, histtype="step", lw=2, label=l1)
+    n2, be2, _ = plt.hist(x2, bins=bins, range=rng, histtype="step", lw=2, label=l2)
+    plt.xlabel(xlabel); plt.ylabel("Counts"); plt.title(title)
+    plt.grid(True, ls="--", alpha=0.5); plt.legend(); plt.tight_layout()
+    plt.savefig(outpath); plt.close()
+
+    if return_counts:
+        # return counts and the shared bin edges
+        return n1, n2, be1
 
 def _hist2d_pair(xarr, yarr, bins, rng, xlabel, title, outpath, log=True):
     # flatten + (dask-)awkward -> numpy
@@ -148,7 +166,7 @@ plots = [
     #("puIdDisc",           60, (-1, 1),      "puIdDisc"),
     #("puId",                8, (-0.5, 7.5),  "puId"),
     #("jetId",               8, (-0.5, 7.5),  "jetId"),
-    ("dxy",                100, (-1000, 1000),     "dxy"),
+    ("dxy",                80, (0, 30),     "dxy"),
 ]
 
 # ----------------------------------------------------------------------
@@ -209,6 +227,25 @@ if __name__ == '__main__':
                                             (cut_filtered_events.Jet.pt > 20) & \
                                             (cut_filtered_events.Jet.isTightLeptonVeto)]
 
+        '''
+        new_var_jets = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & \
+                                            (cut_filtered_events.Jet.pt > 20)]
+        vals = new_var_jets.dxy
+        if hasattr(vals, "compute"):  # dask-awkward safe
+            vals = vals.compute()
+        arr = ak.to_numpy(ak.flatten(vals, axis=None))
+
+        plt.figure()
+        plt.hist(arr, bins=3, range=(998, 1001), histtype='step', lw=2)
+        plt.xlabel(r"Jet $|d_{xy}|$")   # adjust units if known
+        plt.ylabel("Counts")
+        plt.title(f"{sample_name} — all jets |dxy|")
+        plt.grid(True, ls="--", alpha=0.5)
+        plt.tight_layout()
+        plt.savefig(os.path.join("plots", f"{sample_name}_jets_all_dxy.pdf"))
+        plt.close()
+        '''
+
         has_2_jets = ak.num(jets) == 2
         jets_2j = jets[has_2_jets]
         cut_filtered_events_2j = cut_filtered_events[has_2_jets]
@@ -249,9 +286,11 @@ if __name__ == '__main__':
         plt.savefig(os.path.join(sample_out, f"{sample_name}_dR_jet_GenMuon.pdf"))
         plt.close()
         '''
+        
         sample_out = os.path.join("compare_highestNotMatched_vs_secondMatched", sample_name)
         os.makedirs(sample_out, exist_ok=True)
 
+        '''
         for field, nb, rng, xlabel in plots:
             if hasattr(highest_not_matched, field) and hasattr(second_matched, field):
                 _overlay_two_1d(
@@ -263,7 +302,44 @@ if __name__ == '__main__':
                     title=f"{sample_name}: highest(not matched) vs second(matched) — {field}",
                     outpath=os.path.join(sample_out, f"{sample_name}_{field}.pdf"),
                 )
+        '''
 
+        for field, nb, rng, xlabel in plots:
+            if hasattr(highest_not_matched, field) and hasattr(second_matched, field):
+                outpath = os.path.join(sample_out, f"{sample_name}_{field}.pdf")
+                want = (field == "dxy")  # only compute integrals for dxy (or set True for all)
+
+                ret = _overlay_two_1d(
+                    getattr(highest_not_matched, field),
+                    getattr(second_matched, field),
+                    bins=nb, rng=rng, xlabel=xlabel,
+                    title=f"{sample_name}: highest(not matched) vs second(matched) — {field}",
+                    outpath=outpath,
+                    return_counts=want,
+                )
+
+                if want:
+                    n1, n2, edges = ret
+                    full_highest = int(np.sum(n1))
+                    full_second  = int(np.sum(n2))
+                    excl1_highest = int(np.sum(n1[1:]))  
+                    excl1_second  = int(np.sum(n2[1:]))
+
+                    first_bin_range = f"[{edges[0]:.3g}, {edges[1]:.3g})"
+                    rest_range      = f"[{edges[1]:.3g}, {edges[-1]:.3g})"
+
+                    print(f"[{sample_name}] {field} histogram (range {rng})")
+                    print(f"  Binning: {len(edges)-1} bins; first bin = {first_bin_range}")
+
+                    print("  --- All bins included ---")
+                    print(f"    highest not matched: {full_highest}")
+                    print(f"    second matched     : {full_second}")
+                    print(f"    difference         : {full_second - full_highest}")
+
+                    print("  --- Excluding the FIRST bin ---")
+                    print(f"    highest not matched, bins {rest_range}: {excl1_highest}")
+                    print(f"    second matched,      bins {rest_range}: {excl1_second}")
+                    print(f"    difference, excluding first bin       : {excl1_second - excl1_highest}")   
         '''
         sample_out2d = os.path.join("compare_highestNotMatched_vs_secondMatched_2D", sample_name)
         os.makedirs(sample_out2d, exist_ok=True)
