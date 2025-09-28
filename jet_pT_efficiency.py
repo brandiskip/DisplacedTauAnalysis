@@ -134,7 +134,8 @@ if __name__ == '__main__':
         print(f"Processing sample: {sample_name}")
         # add dxy to jet fields
         charged_sel = events.Jet.constituents.pf.charge != 0
-        dxy = ak.flatten(events.Jet.constituents.pf[ak.argmax(events.Jet.constituents.pf[charged_sel].pt, axis=2, keepdims=True)].d0, axis = 2)
+        dxy = abs(ak.where(ak.all(events.Jet.constituents.pf.charge == 0, axis = -1), -999, \
+                ak.flatten(events.Jet.constituents.pf[ak.argmax(events.Jet.constituents.pf[charged_sel].pt, axis=2, keepdims=True)].d0, axis = 2)))
         events['Jet'] = ak.with_field(events.Jet, dxy, where="dxy")
         dxy_err = abs(ak.flatten(events.Jet.constituents.pf[ak.argmax(events.Jet.constituents.pf[charged_sel].pt, axis=2, keepdims=True)].d0Err, axis = 2))
         events['Jet'] = ak.with_field(events.Jet, dxy_err, where="dxy_err")
@@ -143,6 +144,29 @@ if __name__ == '__main__':
         Lxy = np.sqrt(vx**2 + vy**2)
         parent_with_Lxy = ak.with_field(events.GenVisTau.parent, Lxy, where="Lxy")
         events['GenVisTau'] = ak.with_field(events.GenVisTau, parent_with_Lxy, where="parent")
+
+        noise_mask = (
+            (events.Flag.goodVertices)
+            & (events.Flag.globalSuperTightHalo2016Filter)
+            & (events.Flag.EcalDeadCellTriggerPrimitiveFilter)
+            & (events.Flag.BadPFMuonFilter)
+        )
+
+        trigger_mask = (
+            events.HLT.PFMET120_PFMHT120_IDTight
+            | events.HLT.PFMET130_PFMHT130_IDTight
+            | events.HLT.PFMET140_PFMHT140_IDTight
+            | events.HLT.PFMETNoMu120_PFMHTNoMu120_IDTight
+            | events.HLT.PFMETNoMu130_PFMHTNoMu130_IDTight
+            | events.HLT.PFMETNoMu140_PFMHTNoMu140_IDTight
+            | events.HLT.PFMET120_PFMHT120_IDTight_PFHT60
+            | events.HLT.PFMETNoMu110_PFMHTNoMu110_IDTight_FilterHF
+            | events.HLT.PFMETTypeOne140_PFMHT140_IDTight
+            | events.HLT.MET105_IsoTrk50
+            | events.HLT.MET120_IsoTrk50
+        )
+
+        events = events[noise_mask & trigger_mask]
 
         ## find staus and their tau children
         gpart = events.GenPart
@@ -340,7 +364,7 @@ if __name__ == '__main__':
         sorted_by_score = jets_isTightLV_chHEF[ak.argsort(jets_isTightLV_chHEF.disTauTag_score1, ascending=False)]
         jets_isTightLV_chHEF = ak.singletons(ak.firsts(sorted_by_score))
         '''
-
+        '''
         sorted_by_dxy_err = jets[ak.argsort(jets.dxy_err, ascending=True)]
         jets = ak.singletons(ak.firsts(sorted_by_dxy_err))
 
@@ -349,7 +373,7 @@ if __name__ == '__main__':
 
         sorted_by_dxy_err = jets_isTightLV_chHEF[ak.argsort(jets_isTightLV_chHEF.dxy_err, ascending=True)]
         jets_isTightLV_chHEF = ak.singletons(ak.firsts(sorted_by_dxy_err))
-
+        '''
         jet_matched_gen_vis_taus = jets.nearest(cut_filtered_events.GenVisStauTaus, threshold=0.4)
         jet_matched_gen_vis_taus = ak.drop_none(jet_matched_gen_vis_taus)
         '''
@@ -364,8 +388,8 @@ if __name__ == '__main__':
 
         jet_matched_gen_vis_taus_isTightLV_chHEF = jets_isTightLV_chHEF.nearest(cut_filtered_events.GenVisStauTaus, threshold=0.4)
         jet_matched_gen_vis_taus_isTightLV_chHEF = ak.drop_none(jet_matched_gen_vis_taus_isTightLV_chHEF)
-        
-        
+    
+        '''
         #############################################################################################################################################
         # eta efficiency hists  
         #############################################################################################################################################
@@ -389,6 +413,7 @@ if __name__ == '__main__':
         hist_Lxy_den.fill(ak.flatten(cut_filtered_events.GenVisStauTaus.parent.Lxy, axis=None).compute())
         hist_Lxy_num.fill(ak.flatten(jet_matched_gen_vis_taus.parent.Lxy, axis=None).compute())
         _sanitize_inplace(hist_Lxy_num, hist_Lxy_den)
+        '''
 
         #############################################################################################################################################
         # pT efficiency hists  
@@ -399,6 +424,27 @@ if __name__ == '__main__':
         pt_bins_higher = np.arange(600, 1000, 50)
         pt_bins_eff = np.unique(np.concatenate([pt_bins_low, pt_bins_med, pt_bins_high, pt_bins_higher]))
 
+        pt_axis = axis.Variable(pt_bins_eff, flow=False, name="GenVisTau_pt")
+        hist_pt_den = Hist(pt_axis)  # denominator: GenVisTau pT (selected)
+        hist_pt_num = Hist(pt_axis)  # numerator: GenVisTau pT for those matched to isTightLV_no_chHEF jets
+
+        # fill denominator with all selected GenVisStauTaus (your usual selection)
+        hist_pt_den.fill(ak.flatten(cut_filtered_events.GenVisStauTaus.pt, axis=None).compute())
+
+        # fill numerator with GenVisStauTaus that matched jets passing isTightLV_no_chHEF
+        hist_pt_num.fill(ak.flatten(jet_matched_gen_vis_taus_isTightLV_no_chHEF.pt, axis=None).compute())
+
+        # sanitize & plot
+        _sanitize_inplace(hist_pt_num, hist_pt_den)
+
+        plt.clf()
+        plot_efficiency(hist_pt_num, hist_pt_den)
+        plt.title(f"isTightLV (no chHEF) efficiency vs GenVisTau pT — {sample_name}")
+        plt.xlabel("GenVisTau pT [GeV]")
+        plt.ylabel("Efficiency")
+        plt.savefig(os.path.join(pT_output_dir, f"eff_vs_pt_iTLV_no_chHEF_{sample_name}.pdf"))
+
+        '''
         var_axes = {'pt': axis.Variable(pt_bins_eff, flow=False, name="GenVisTau_pt")}
         hist_pt_den = Hist(var_axes['pt'])
         hist_pt_num = Hist(var_axes['pt'])
@@ -406,7 +452,9 @@ if __name__ == '__main__':
         hist_pt_den.fill(ak.flatten(cut_filtered_events.GenVisStauTaus.pt, axis=None).compute())
         hist_pt_num.fill(ak.flatten(jet_matched_gen_vis_taus.pt, axis=None).compute())
         _sanitize_inplace(hist_pt_num, hist_pt_den)
+        '''
 
+        '''
         #############################################################################################################################################
         # d0 efficiency hists  
         #############################################################################################################################################
@@ -427,6 +475,7 @@ if __name__ == '__main__':
             "d0":  _hist_to_payload(hist_d0_num,  hist_d0_den),
         }
         _append_histograms_to_json(json_cache, sample_name, "all_jets", _payload)
+        '''
 
         '''
         # -------------------- isTight_no_chHEF --------------------
@@ -482,7 +531,7 @@ if __name__ == '__main__':
         }
         _append_histograms_to_json(json_cache, sample_name, "isTight_chHEF", _payload_isTight_chHEF)
         '''
-
+        '''
         # -------------------- isTightLV_no_chHEF --------------------
         hist_eta_num_isTightLV_no_chHEF = Hist(eta_axis)
         hist_eta_num_isTightLV_no_chHEF.fill(ak.flatten(jet_matched_gen_vis_taus_isTightLV_no_chHEF.eta, axis=None).compute())
@@ -532,6 +581,7 @@ if __name__ == '__main__':
             "d0":  _hist_to_payload(hist_d0_num_isTightLV_chHEF,   hist_d0_den),
         }
         _append_histograms_to_json(json_cache, sample_name, "isTightLV_chHEF", _payload_isTightLV_chHEF)
+        '''
 
         '''
         # --- JETS (category="jets") ---
