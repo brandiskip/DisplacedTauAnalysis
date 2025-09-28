@@ -146,11 +146,15 @@ if __name__ == '__main__':
         events['GenVisTau'] = ak.with_field(events.GenVisTau, parent_with_Lxy, where="parent")
 
         noise_mask = (
-            (events.Flag.goodVertices)
-            & (events.Flag.globalSuperTightHalo2016Filter)
-            & (events.Flag.EcalDeadCellTriggerPrimitiveFilter)
-            & (events.Flag.BadPFMuonFilter)
-        )
+                     (events.Flag.goodVertices == 1) 
+                     & (events.Flag.globalSuperTightHalo2016Filter == 1)
+                     & (events.Flag.EcalDeadCellTriggerPrimitiveFilter == 1)
+                     & (events.Flag.BadPFMuonFilter == 1)
+                     & (events.Flag.BadPFMuonDzFilter == 1)
+                     & (events.Flag.hfNoisyHitsFilter == 1)
+                     & (events.Flag.eeBadScFilter == 1)
+                     & (events.Flag.ecalBadCalibFilter == 1)
+                         )
 
         trigger_mask = (
             events.HLT.PFMET120_PFMHT120_IDTight
