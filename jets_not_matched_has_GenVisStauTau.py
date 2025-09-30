@@ -279,52 +279,54 @@ if __name__ == '__main__':
         gen_electron = cut_filtered_events_2j.GenElectron[evt_keep]
         gen_muon = cut_filtered_events_2j.GenMuon[evt_keep]
 
-        n_gen_elec = ak.num(gen_electron, axis=1)
-        n_gen_muon = ak.num(gen_muon,     axis=1)
+        taus_keep = cut_filtered_events_2j.staus_taus[evt_keep]
 
-        if hasattr(n_gen_elec, "compute"):
-            n_gen_elec = n_gen_elec.compute()
-        if hasattr(n_gen_muon, "compute"):
-            n_gen_muon = n_gen_muon.compute()
+        children = taus_keep.distinctChildren 
+        ele_mask = (abs(children.pdgId) == 11)
 
-        # Numpy arrays
-        n_gen_elec = np.asarray(n_gen_elec)
-        n_gen_muon = np.asarray(n_gen_muon)
+        n_ele_per_tau = ak.sum(ele_mask, axis=-1)
+        n_ele_per_event = ak.sum(n_ele_per_tau, axis=-1)
 
-        # Output dir (your usual convention)
+        if hasattr(n_ele_per_event, "compute"):
+            n_ele_per_event = n_ele_per_event.compute()
+        n_ele_per_event = np.asarray(n_ele_per_event)
+
+        # ---- Plot: number of electrons from tau decay per event ----
         sample_out = os.path.join("compare_highestNotMatched_vs_secondMatched", sample_name)
         os.makedirs(sample_out, exist_ok=True)
 
-        # Nice integer-centered bins (0..5 by default; bump if you expect more)
-        def int_centered_edges(nmax=5):
-            return np.arange(-0.5, nmax + 0.5 + 1e-9, 1)
+        edges = np.arange(-0.5, 3.5 + 1e-9, 1)  # bins centered at 0,1,2,3 (adjust if needed)
 
-        # --- GenElectron multiplicity ---
-        edges = int_centered_edges(5)
         plt.figure()
-        plt.hist(n_gen_elec, bins=edges, histtype='step', lw=2)
-        plt.xlabel("Number of GenElectrons per event")
+        plt.hist(n_ele_per_event, bins=edges, histtype='step', lw=2)
+        plt.xlabel("Electrons from tau decay per event")
         plt.ylabel("Counts")
-        plt.title(f"{sample_name}: GenElectron multiplicity")
-        plt.xticks(np.arange(0, 6, 1))
-        plt.xlim(-0.5, 5.5)
+        plt.title(f"{sample_name}: e from τ decay (events: highest NOT matched & second matched)")
+        plt.xticks(np.arange(0, 4, 1))
+        plt.xlim(-0.5, 3.5)
         plt.grid(True, ls="--", alpha=0.5)
         plt.tight_layout()
-        plt.savefig(os.path.join(sample_out, f"{sample_name}_GenElectron_multiplicity.pdf"))
+        plt.savefig(os.path.join(sample_out, f"{sample_name}_nElectrons_fromTauDecay.pdf"))
         plt.close()
 
-        # --- GenMuon multiplicity ---
-        edges = int_centered_edges(5)
+        mu_mask = (abs(children.pdgId) == 13)
+        n_mu_per_tau    = ak.sum(mu_mask, axis=-1)
+        n_mu_per_event  = ak.sum(n_mu_per_tau, axis=-1)
+        if hasattr(n_mu_per_event, "compute"):
+            n_mu_per_event = n_mu_per_event.compute()
+        n_mu_per_event = np.asarray(n_mu_per_event)
+
+        edges = np.arange(-0.5, 3.5 + 1e-9, 1)
         plt.figure()
-        plt.hist(n_gen_muon, bins=edges, histtype='step', lw=2)
-        plt.xlabel("Number of GenMuons per event")
+        plt.hist(n_mu_per_event, bins=edges, histtype='step', lw=2)
+        plt.xlabel("Muons from tau decay per event")
         plt.ylabel("Counts")
-        plt.title(f"{sample_name}: GenMuon multiplicity")
-        plt.xticks(np.arange(0, 6, 1))
-        plt.xlim(-0.5, 5.5)
+        plt.title(f"{sample_name}: μ from τ decay (events: highest NOT matched & second matched)")
+        plt.xticks(np.arange(0, 4, 1))
+        plt.xlim(-0.5, 3.5)
         plt.grid(True, ls="--", alpha=0.5)
         plt.tight_layout()
-        plt.savefig(os.path.join(sample_out, f"{sample_name}_GenMuon_multiplicity.pdf"))
+        plt.savefig(os.path.join(sample_out, f"{sample_name}_nMuons_fromTauDecay.pdf"))
         plt.close()
 
         '''
@@ -394,6 +396,7 @@ if __name__ == '__main__':
             )
         '''
 
+        '''
         genmu_keep = cut_filtered_events_2j.GenMuon[evt_keep]
         highest_matched_any_mask = ~highest_not_matched_mask           # shape (events, 1)
         evt_keep_highest_any     = ak.flatten(highest_matched_any_mask, axis=1)  # (events,)
@@ -445,6 +448,7 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.savefig(os.path.join(sample_out, f"{sample_name}_GenMuon_Lxy_overlay_highestNotMatched_vs_highestMatched.pdf"))
         plt.close()
+        '''
 
         '''
         sel_events = cut_filtered_events_2j[evt_keep]
