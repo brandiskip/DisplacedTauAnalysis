@@ -144,29 +144,29 @@ def _hist2d_pair(xarr, yarr, bins, rng, xlabel, title, outpath, log=True):
 
 # ---------- what to plot (field, bins, (min,max), label) ----------
 plots = [
-    #("pt",                 60, (0, 750),     r"Jet $p_T$ [GeV]"),
-    #("eta",                60, (-2.5, 2.5),  r"Jet $\eta$"),
-    #("phi",                64, (-3.2, 3.2),  r"Jet $\phi$"),
-    #("mass",               60, (0, 120),     "Jet mass [GeV]"),
-    #("area",               50, (0, 1.5),     "Jet area"),
-    #("disTauTag_score1",   50, (0, 1.0),     "disTauTag_score1"),
-    #("disTauTag_score0",   50, (0, 1.0),     "disTauTag_score0"),
-    #("btagPNetTauVJet",    50, (0, 1.0),     "btagPNetTauVJet"),
-    #("btagDeepFlavQG",     50, (0, 1.0),     "btagDeepFlavQG"),
-    #("btagPNetQvG",        50, (0, 1.0),     "btagPNetQvG"),
-    #("muEF",               50, (0, 0.8),     "muEF"),
-    #("chHEF",              50, (0, 1.0),     "chHEF"),
-    #("neHEF",              50, (0, 1.0),     "neHEF"),
-    #("chEmEF",             50, (0, 1.0),     "chEmEF"),
-    #("neEmEF",             50, (0, 1.0),     "neEmEF"),
-    #("nConstituents",      80, (0, 80),      "nConstituents"),
-    #("chMultiplicity",     60, (0, 60),      "chMultiplicity"),
-    #("neMultiplicity",     60, (0, 60),      "neMultiplicity"),
-    #("qgl",                50, (0, 1.0),     "qgl"),
-    #("puIdDisc",           60, (-1, 1),      "puIdDisc"),
-    #("puId",                8, (-0.5, 7.5),  "puId"),
-    #("jetId",               8, (-0.5, 7.5),  "jetId"),
-    ("dxy",                100, (0, 0.5),     "dxy [cm]"),
+    ("pt",                 60, (0, 750),     r"Jet $p_T$ [GeV]"),
+    ("eta",                60, (-2.5, 2.5),  r"Jet $\eta$"),
+    ("phi",                64, (-3.2, 3.2),  r"Jet $\phi$"),
+    ("mass",               60, (0, 120),     "Jet mass [GeV]"),
+    ("area",               50, (0, 1.5),     "Jet area"),
+    ("disTauTag_score1",   50, (0, 1.0),     "disTauTag_score1"),
+    ("disTauTag_score0",   50, (0, 1.0),     "disTauTag_score0"),
+    ("btagPNetTauVJet",    50, (0, 1.0),     "btagPNetTauVJet"),
+    ("btagDeepFlavQG",     50, (0, 1.0),     "btagDeepFlavQG"),
+    ("btagPNetQvG",        50, (0, 1.0),     "btagPNetQvG"),
+    ("muEF",               50, (0, 0.8),     "muEF"),
+    ("chHEF",              50, (0, 1.0),     "chHEF"),
+    ("neHEF",              50, (0, 1.0),     "neHEF"),
+    ("chEmEF",             50, (0, 1.0),     "chEmEF"),
+    ("neEmEF",             50, (0, 1.0),     "neEmEF"),
+    ("nConstituents",      80, (0, 80),      "nConstituents"),
+    ("chMultiplicity",     60, (0, 60),      "chMultiplicity"),
+    ("neMultiplicity",     60, (0, 60),      "neMultiplicity"),
+    ("qgl",                50, (0, 1.0),     "qgl"),
+    ("puIdDisc",           60, (-1, 1),      "puIdDisc"),
+    ("puId",                8, (-0.5, 7.5),  "puId"),
+    ("jetId",               8, (-0.5, 7.5),  "jetId"),
+    ("dxy",                100, (0, 20),     "dxy [cm]"),
 ]
 
 # ----------------------------------------------------------------------
@@ -218,6 +218,13 @@ if __name__ == '__main__':
 
         events['GenElectron'] = events.GenPart[(abs(events.GenPart.pdgId) == 11) & (events.GenPart.hasFlags("isLastCopy"))] 
         events['GenElectron'] = events.GenElectron[(events.GenElectron.pt > 20) & (abs(events.GenElectron.eta) < 2.4)]
+
+        '''
+        mask = (ak.num(events.GenVisStauTaus) == 1) & (ak.num(events.GenMuon) == 1) & (ak.num(events.GenElectron) == 0)
+        events = events[mask]
+        '''
+        mask = (ak.num(events.GenVisStauTaus) == 1) & (ak.num(events.GenElectron) == 1) & (ak.num(events.GenMuon) == 0)
+        events = events[mask]
 
         events['staus_taus'] = ak.firsts(events.staus_taus[ak.argsort(events.staus_taus.pt, ascending=False)], axis = 2)
         staus_taus = events['staus_taus']
@@ -279,6 +286,7 @@ if __name__ == '__main__':
         gen_electron = cut_filtered_events_2j.GenElectron[evt_keep]
         gen_muon = cut_filtered_events_2j.GenMuon[evt_keep]
 
+        '''
         taus_keep = cut_filtered_events_2j.staus_taus[evt_keep]
 
         children = taus_keep.distinctChildren 
@@ -328,6 +336,7 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.savefig(os.path.join(sample_out, f"{sample_name}_nMuons_fromTauDecay.pdf"))
         plt.close()
+        '''
 
         '''
         highest_matched_mask = ~highest_not_matched_mask
@@ -488,7 +497,9 @@ if __name__ == '__main__':
         plt.close()
         '''
 
-        '''
+        sample_out = os.path.join("compare_highestNotMatched_vs_secondMatched", sample_name)
+        os.makedirs(sample_out, exist_ok=True)
+
         for field, nb, rng, xlabel in plots:
             if hasattr(highest_not_matched, field) and hasattr(second_matched, field):
                 _overlay_two_1d(
@@ -498,9 +509,10 @@ if __name__ == '__main__':
                     rng=rng,
                     xlabel=xlabel,
                     title=f"{sample_name}: highest(not matched) vs second(matched) — {field}",
-                    outpath=os.path.join(sample_out, f"{sample_name}_{field}.pdf"),
+                    outpath=os.path.join(sample_out, f"{sample_name}_{field}_require_GenElectron.pdf"),
                 )
 
+        '''
         for field, nb, rng, xlabel in plots:
             if hasattr(highest_not_matched, field) and hasattr(second_matched, field):
                 outpath = os.path.join(sample_out, f"{sample_name}_{field}.pdf")
