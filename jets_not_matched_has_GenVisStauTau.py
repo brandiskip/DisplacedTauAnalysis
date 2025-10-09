@@ -78,6 +78,28 @@ def _to_np_flat(arr):
     return ak.to_numpy(ak.flatten(arr, axis=None))
 
 '''
+def _overlay_two_1d(
+        a1, a2, bins, rng, xlabel, title, outpath,
+        l1="highest (not matched)", l2="second (matched)",
+        ylog=False
+    ):
+        x1 = _to_np_flat(a1)
+        x2 = _to_np_flat(a2)
+        plt.figure()
+        plt.hist(x1, bins=bins, range=rng, histtype="step", lw=2, label=l1)
+        plt.hist(x2, bins=bins, range=rng, histtype="step", lw=2, label=l2)
+        plt.xlabel(xlabel)
+        plt.ylabel("Counts")
+        plt.title(title)
+        if ylog:   # <-- new option
+            plt.yscale("log")
+        plt.grid(True, ls="--", alpha=0.5)
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(outpath)
+        plt.close()
+'''
+
 def _overlay_two_1d(a1, a2, bins, rng, xlabel, title, outpath, l1="highest (not matched)", l2="second (matched)"):
     x1 = _to_np_flat(a1)
     x2 = _to_np_flat(a2)
@@ -92,6 +114,7 @@ def _overlay_two_1d(a1, a2, bins, rng, xlabel, title, outpath, l1="highest (not 
     plt.tight_layout()
     plt.savefig(outpath)
     plt.close()
+
 '''
 def _overlay_two_1d(a1, a2, bins, rng, xlabel, title, outpath,
                     l1="highest (not matched)", l2="second (matched)",
@@ -109,7 +132,7 @@ def _overlay_two_1d(a1, a2, bins, rng, xlabel, title, outpath,
     if return_counts:
         # return counts and the shared bin edges
         return n1, n2, be1
-
+'''
 def _hist2d_pair(xarr, yarr, bins, rng, xlabel, title, outpath, log=True):
     # flatten + (dask-)awkward -> numpy
     if hasattr(xarr, "compute"): xarr = xarr.compute()
@@ -180,6 +203,8 @@ if __name__ == '__main__':
         dxy = abs(ak.where(ak.all(events.Jet.constituents.pf.charge == 0, axis = -1), -999, \
                 ak.flatten(events.Jet.constituents.pf[ak.argmax(events.Jet.constituents.pf[charged_sel].pt, axis=2, keepdims=True)].d0, axis = 2)))
         events['Jet'] = ak.with_field(events.Jet, dxy, where="dxy")
+        dxy_err = abs(ak.flatten(events.Jet.constituents.pf[ak.argmax(events.Jet.constituents.pf[charged_sel].pt, axis=2, keepdims=True)].d0Err, axis = 2))
+        events['Jet'] = ak.with_field(events.Jet, dxy_err, where="dxy_err")
         vx = events.GenVisTau.parent.vx - events.GenVisTau.parent.parent.vx
         vy = events.GenVisTau.parent.vy - events.GenVisTau.parent.parent.vy
         Lxy = np.sqrt(vx**2 + vy**2)
@@ -205,7 +230,9 @@ if __name__ == '__main__':
         #events = events[(ak.num(events.GenVisStauTaus) > 0)]
 
         events['GenMuon'] = gpart[(abs(gpart.pdgId) == 13) & (gpart.hasFlags("isLastCopy"))] 
-        events['GenMuon'] = events.GenMuon[(events.GenMuon.pt > 20) & (abs(events.GenMuon.eta) < 2.4)]
+        events['GenMuon'] = events.GenMuon[(events.GenMuon.pt > 20) & \
+                                            (abs(events.GenMuon.eta) < 2.4) & \
+                                            (events.GenMuon.distinctParent.distinctParent.pdgId == 1000015)]
 
         vx = events.GenMuon.vx
         vy = events.GenMuon.vy
@@ -217,14 +244,24 @@ if __name__ == '__main__':
         events['GenMuon'] = ak.with_field(events.GenMuon, GenMuon_d0, where="d0")
 
         events['GenElectron'] = events.GenPart[(abs(events.GenPart.pdgId) == 11) & (events.GenPart.hasFlags("isLastCopy"))] 
-        events['GenElectron'] = events.GenElectron[(events.GenElectron.pt > 20) & (abs(events.GenElectron.eta) < 2.4)]
 
-        '''
+        vx = events.GenElectron.vx
+        vy = events.GenElectron.vy
+        electron_Lxy = np.sqrt(vx**2 + vy**2)
+        events['GenElectron'] = ak.with_field(events.GenElectron, electron_Lxy, where="Lxy")
+
+        events['GenElectron'] = events.GenElectron[(events.GenElectron.pt > 20) & \
+                                                    (abs(events.GenElectron.eta) < 2.4) & \
+                                                    (events.GenElectron.Lxy < 100.0) & \
+                                                    (events.GenElectron.distinctParent.distinctParent.pdgId == 1000015)]
+
+        
         mask = (ak.num(events.GenVisStauTaus) == 1) & (ak.num(events.GenMuon) == 1) & (ak.num(events.GenElectron) == 0)
         events = events[mask]
         '''
         mask = (ak.num(events.GenVisStauTaus) == 1) & (ak.num(events.GenElectron) == 1) & (ak.num(events.GenMuon) == 0)
         events = events[mask]
+        '''
 
         events['staus_taus'] = ak.firsts(events.staus_taus[ak.argsort(events.staus_taus.pt, ascending=False)], axis = 2)
         staus_taus = events['staus_taus']
@@ -281,10 +318,135 @@ if __name__ == '__main__':
         highest_not_matched = ak.firsts(highest_score_jets[evt_keep])              
         second_matched      = ak.firsts(second_highest_score_jets[evt_keep])
 
-        # Select GenVisStauTaus for the kept events
         gen_sel = cut_filtered_events_2j.GenVisStauTaus[evt_keep]
         gen_electron = cut_filtered_events_2j.GenElectron[evt_keep]
         gen_muon = cut_filtered_events_2j.GenMuon[evt_keep]
+
+        # --- Leading PF candidate selection for highest_not_matched jets ---
+        sorted_pf_high = highest_not_matched.constituents.pf[
+            ak.argsort(highest_not_matched.constituents.pf.pt, ascending=False)
+        ]
+        highest_pf_cand_high = ak.firsts(sorted_pf_high, axis=1)
+
+        # --- Leading PF candidate selection for second_matched jets ---
+        sorted_pf_second = second_matched.constituents.pf[
+            ak.argsort(second_matched.constituents.pf.pt, ascending=False)
+        ]
+        highest_pf_cand_second = ak.firsts(sorted_pf_second, axis=1)
+
+        # --- Now do ΔR metric_table between each jet and its own leading PF cand ---
+        dR_highest = highest_not_matched.metric_table(highest_pf_cand_high, axis=None).compute()
+        dR_second  = second_matched.metric_table(highest_pf_cand_second, axis=None).compute()
+
+        # Flatten for plotting
+        dR_highest_flat = ak.to_numpy(ak.ravel(dR_highest))
+        dR_second_flat  = ak.to_numpy(ak.ravel(dR_second))
+
+        sample_out = os.path.join("compare_highestNotMatched_vs_secondMatched", sample_name)
+        os.makedirs(sample_out, exist_ok=True)
+
+        # --- Plot 1D overlay ---
+        bins_1d = np.linspace(0.0, 0.8, 81)
+        plt.figure()
+        if dR_highest_flat.size:
+            plt.hist(dR_highest_flat, bins=bins_1d, histtype='step', lw=2, label='highest_not_matched (leading PF)')
+        if dR_second_flat.size:
+            plt.hist(dR_second_flat,  bins=bins_1d, histtype='step', lw=2, label='second_matched (leading PF)')
+        plt.xlabel(r'$\Delta R$(jet, leading PF cand)')
+        plt.ylabel("Counts")
+        plt.title(f"{sample_name}: ΔR to leading PF candidate")
+        plt.legend()
+        plt.grid(True, ls="--", alpha=0.5)
+        plt.tight_layout()
+        plt.savefig(os.path.join(sample_out, f"{sample_name}_deltaR_leadingPF_1D_overlay.pdf"))
+        plt.close()
+        '''
+        sample_out = os.path.join("compare_highestNotMatched_vs_secondMatched", sample_name)
+        os.makedirs(sample_out, exist_ok=True)
+
+        dR_highest = highest_not_matched.metric_table(highest_not_matched.constituents.pf).compute()
+        dR_second  = second_matched.metric_table(second_matched.constituents.pf).compute()
+
+        dR_highest_flat = ak.to_numpy(ak.ravel(dR_highest))
+        dR_second_flat  = ak.to_numpy(ak.ravel(dR_second))
+
+        bins_1d = np.linspace(0.0, 0.8, 81)  # adjust to your jet R if needed
+
+        plt.figure()
+        if dR_highest_flat.size:
+            plt.hist(dR_highest_flat, bins=bins_1d, histtype='step', lw=2, label='highest_not_matched')
+        if dR_second_flat.size:
+            plt.hist(dR_second_flat,  bins=bins_1d, histtype='step', lw=2, label='second_matched')
+        plt.xlabel(r'$\Delta R$(jet, PF constituent)')
+        plt.ylabel("Number of jet–PF pairs")
+        plt.title(f"{sample_name}: ΔR between jets and PF constituents")
+        plt.legend()
+        plt.grid(True, ls="--", alpha=0.5)
+        plt.tight_layout()
+        plt.savefig(os.path.join(sample_out, f"{sample_name}_deltaR_jet_pfconstituents_1D_overlay.pdf"))
+        plt.close() 
+        '''    
+
+        '''
+        sample_out = os.path.join("compare_highestNotMatched_vs_secondMatched", sample_name)
+        os.makedirs(sample_out, exist_ok=True)
+
+        # --- Helper to flatten → numpy (handles jagged + dask)
+        def _flat_np(x):
+            return ak.to_numpy(ak.flatten(x, axis=None).compute())
+
+        # --- PF constituent pT overlay (highest_not_matched vs second_matched)
+        pt_highest = _flat_np(highest_not_matched.constituents.pf.pt)
+        pt_second  = _flat_np(second_matched.constituents.pf.pt)
+
+        if pt_highest.size + pt_second.size > 0:
+            all_pts = np.concatenate([pt_highest, pt_second]) if pt_highest.size and pt_second.size else (pt_highest if pt_highest.size else pt_second)
+            # pick a sane upper edge (cap extreme tails)
+            max_pt = float(np.percentile(all_pts, 99.5)) if all_pts.size else 50.0
+            max_pt = max(50.0, max_pt)
+            bins_pt = np.linspace(0.0, max_pt, 60)
+
+            plt.figure()
+            if pt_highest.size:
+                plt.hist(pt_highest, bins=bins_pt, histtype="step", lw=2, label="highest_not_matched")
+            if pt_second.size:
+                plt.hist(pt_second,  bins=bins_pt, histtype="step", lw=2, label="second_matched")
+            plt.xlabel("PF constituent $p_T$ [GeV]")
+            plt.ylabel("Counts")
+            plt.title(f"{sample_name}: PF-constituent $p_T$ (highest_not_matched vs second_matched)")
+            plt.legend()
+            plt.grid(True, ls="--", alpha=0.5)
+            plt.tight_layout()
+            plt.savefig(os.path.join(sample_out, f"{sample_name}_pfconst_pt_overlay.pdf"))
+            plt.close()
+
+        # --- Charged-only: numberOfPixelHits overlay
+        charged_highest_mask = (highest_not_matched.constituents.pf.charge != 0)
+        charged_second_mask  = (second_matched.constituents.pf.charge != 0)
+
+        pix_highest = _flat_np(highest_not_matched.constituents.pf.numberOfPixelHits[charged_highest_mask])
+        pix_second  = _flat_np(second_matched.constituents.pf.numberOfPixelHits[charged_second_mask])
+
+        if pix_highest.size + pix_second.size > 0:
+            max_hits = int(max(pix_highest.max() if pix_highest.size else 0,
+                               pix_second.max()  if pix_second.size  else 0))
+            bins_hits = np.arange(-0.5, max_hits + 0.5 + 1, 1)
+
+            plt.figure()
+            if pix_highest.size:
+                plt.hist(pix_highest, bins=bins_hits, histtype="step", lw=2, label="highest_not_matched (charged)")
+            if pix_second.size:
+                plt.hist(pix_second,  bins=bins_hits, histtype="step", lw=2, label="second_matched (charged)")
+            plt.xlabel("PF constituent numberOfPixelHits (charged only)")
+            plt.ylabel("Counts")
+            plt.title(f"{sample_name}: numberOfPixelHits (highest_not_matched vs second_matched)")
+            plt.legend()
+            plt.grid(True, ls="--", alpha=0.5)
+            plt.tight_layout()
+            plt.savefig(os.path.join(sample_out, f"{sample_name}_pfconst_pixelHits_charged_overlay.pdf"))
+            plt.close()
+        '''
+
 
         '''
         taus_keep = cut_filtered_events_2j.staus_taus[evt_keep]
@@ -404,7 +566,6 @@ if __name__ == '__main__':
                 f"second_matched_eta={eta_second_matched[i]:.1f}"
             )
         '''
-
         '''
         genmu_keep = cut_filtered_events_2j.GenMuon[evt_keep]
         highest_matched_any_mask = ~highest_not_matched_mask           # shape (events, 1)
@@ -496,7 +657,7 @@ if __name__ == '__main__':
         plt.savefig(os.path.join(sample_out, f"{sample_name}_second_matched.matched_gen.partonFlavour.pdf"))
         plt.close()
         '''
-
+        '''
         sample_out = os.path.join("compare_highestNotMatched_vs_secondMatched", sample_name)
         os.makedirs(sample_out, exist_ok=True)
 
@@ -509,8 +670,9 @@ if __name__ == '__main__':
                     rng=rng,
                     xlabel=xlabel,
                     title=f"{sample_name}: highest(not matched) vs second(matched) — {field}",
-                    outpath=os.path.join(sample_out, f"{sample_name}_{field}_require_GenElectron.pdf"),
+                    outpath=os.path.join(sample_out, f"{sample_name}_{field}_require_GenMuon.pdf"),
                 )
+        '''
 
         '''
         for field, nb, rng, xlabel in plots:
