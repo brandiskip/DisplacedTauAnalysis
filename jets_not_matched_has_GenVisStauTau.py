@@ -301,7 +301,7 @@ if __name__ == '__main__':
         plt.savefig(os.path.join("plots", f"{sample_name}_jets_all_dxy.pdf"))
         plt.close()
         '''
-
+        
         has_2_jets = ak.num(jets) == 2
         jets_2j = jets[has_2_jets]
         cut_filtered_events_2j = cut_filtered_events[has_2_jets]
@@ -321,7 +321,78 @@ if __name__ == '__main__':
         gen_sel = cut_filtered_events_2j.GenVisStauTaus[evt_keep]
         gen_electron = cut_filtered_events_2j.GenElectron[evt_keep]
         gen_muon = cut_filtered_events_2j.GenMuon[evt_keep]
+        cut_filtered_events_2j = cut_filtered_events_2j[evt_keep]
 
+        pf_mu_mask = (highest_not_matched.constituents.pf.pdgId == 13)
+        new_mask = (ak.sum(pf_mu_mask, axis=-1) > 0)
+        cut_filtered_events_2j = cut_filtered_events_2j[new_mask]
+        mu_sel = (cut_filtered_events_2j.Muon.isGlobal & cut_filtered_events_2j.Muon.isPFcand)
+
+        # Per-event counts of True/False
+        n_true_per_event  = ak.sum(mu_sel,  axis=-1)              # number of True per event
+        n_false_per_event = ak.sum(~mu_sel, axis=-1)              # number of False per event
+
+        # Compute to concrete arrays for counting/printing
+        n_true_per_event_np  = ak.to_numpy(n_true_per_event.compute())
+        n_false_per_event_np = ak.to_numpy(n_false_per_event.compute())
+
+        # Totals across events
+        n_events          = int(n_true_per_event_np.shape[0])
+        events_with_true  = int((n_true_per_event_np  > 0).sum())
+        events_with_false = int((n_false_per_event_np > 0).sum())
+
+        print(f"Total events: {n_events}")
+        print(f"Events containing at least one TRUE:  {events_with_true}")
+        print(f"Events containing at least one FALSE: {events_with_false}")
+
+
+        '''
+        # plot dR between GenMuon and jets for highest not matched vs 2nd matched 
+        highest_not_matched = highest_not_matched[highest_not_matched.muEF < 0.8]
+        mu_mask = (highest_not_matched.muEF < 0.8)
+
+        jets_hi_mu_EF = highest_not_matched[mu_mask]
+        muons_hi_muEF = gen_muon[mu_mask]
+
+        second_mu_mask = (second_matched.muEF < 0.8)
+        jets_second_hi_mu_EF = second_matched[second_mu_mask]
+        muons_second_hi_muEF = gen_muon[second_mu_mask]
+
+        dR_GenMuon = jets_hi_mu_EF.metric_table(muons_hi_muEF).compute()
+        dr_mu_flat = ak.to_numpy(ak.ravel(dR_GenMuon))
+
+        dR_GenMuon_second = jets_second_hi_mu_EF.metric_table(muons_second_hi_muEF).compute()
+        dr_mu_flat_second  = ak.to_numpy(ak.ravel(dR_GenMuon_second)) 
+
+        out_dir = os.path.join("deltaR_GenMuon", sample_name)
+        os.makedirs(out_dir, exist_ok=True)
+
+        bins = np.linspace(0.0, 5.0, 51)
+
+        plt.figure()
+        plotted = False
+
+        if dr_mu_flat.size:
+            plt.hist(dr_mu_flat, bins=bins, histtype="step", lw=2,
+                     label="highest_not_matched vs GenMuon")
+            plotted = True
+
+        if dr_mu_flat_second.size:
+            plt.hist(dr_mu_flat_second, bins=bins, histtype="step", lw=2,
+                     label="second_matched vs GenMuon")
+            plotted = True
+        plt.xlabel(r"$\Delta R$(jet, GenMuon)")
+        plt.ylabel("Number of jet–muon pairs")
+        plt.title(f"{sample_name}: $\Delta R$ between jets and GenMuons if (μEF<0.8)")
+        if plotted:
+            plt.legend()
+        plt.grid(True, ls="--", alpha=0.5)
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, f"{sample_name}_deltaR_GenMuon.pdf"))
+        plt.close()
+        '''
+
+        '''
         # --- Leading PF candidate selection for highest_not_matched jets ---
         sorted_pf_high = highest_not_matched.constituents.pf[
             ak.argsort(highest_not_matched.constituents.pf.pt, ascending=False)
@@ -360,6 +431,8 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.savefig(os.path.join(sample_out, f"{sample_name}_deltaR_leadingPF_1D_overlay.pdf"))
         plt.close()
+        '''
+
         '''
         sample_out = os.path.join("compare_highestNotMatched_vs_secondMatched", sample_name)
         os.makedirs(sample_out, exist_ok=True)
@@ -742,6 +815,7 @@ if __name__ == '__main__':
         
         # add isTightLeptonVeto to jets if lepton veto needed
         #jets_tightLeptonVeto = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20) & (cut_filtered_events.Jet.isTightLeptonVeto) & (cut_filtered_events.Jet.disTauTag_score1 > 0.9)]
+        
         '''
         ###################################################################################################
         # Plots for deltaR for GenMuon wrt jets
@@ -763,7 +837,7 @@ if __name__ == '__main__':
         plt.legend()
         plt.grid(True, ls="--", alpha=0.5)
         plt.tight_layout()
-        plt.savefig(os.path.join(out_dir_genmuon_high_score, f"deltaR_GenMuon_{sample_name}.pdf"))
+        plt.savefig(os.path.join(out_dir_genmuon_high_score, f"deltaR_GenMuon_{sample_name}_requireGenMuon.pdf"))
         plt.close()
         '''
 
