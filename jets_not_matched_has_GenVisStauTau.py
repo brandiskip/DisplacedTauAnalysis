@@ -255,13 +255,12 @@ if __name__ == '__main__':
                                                     (events.GenElectron.Lxy < 100.0) & \
                                                     (events.GenElectron.distinctParent.distinctParent.pdgId == 1000015)]
 
-        
+        '''
         mask = (ak.num(events.GenVisStauTaus) == 1) & (ak.num(events.GenMuon) == 1) & (ak.num(events.GenElectron) == 0)
         events = events[mask]
         '''
         mask = (ak.num(events.GenVisStauTaus) == 1) & (ak.num(events.GenElectron) == 1) & (ak.num(events.GenMuon) == 0)
         events = events[mask]
-        '''
 
         events['staus_taus'] = ak.firsts(events.staus_taus[ak.argsort(events.staus_taus.pt, ascending=False)], axis = 2)
         staus_taus = events['staus_taus']
@@ -322,7 +321,31 @@ if __name__ == '__main__':
         gen_electron = cut_filtered_events_2j.GenElectron[evt_keep]
         gen_muon = cut_filtered_events_2j.GenMuon[evt_keep]
         cut_filtered_events_2j = cut_filtered_events_2j[evt_keep]
+        total_events_before = int(ak.num(cut_filtered_events_2j, axis=0).compute())
 
+        pf_ele_mask = (highest_not_matched.constituents.pf.pdgId == 11)
+        new_mask = (ak.sum(pf_ele_mask, axis=-1) > 0)
+        cut_filtered_events_2j = cut_filtered_events_2j[new_mask]
+        ele_sel = (cut_filtered_events_2j.Electron.isPFcand)
+
+        # Per-event counts of True/False
+        n_true_per_event  = ak.sum(ele_sel,  axis=-1)              # number of True per event
+        n_false_per_event = ak.sum(~ele_sel, axis=-1)              # number of False per event
+
+        # Compute to concrete arrays for counting/printing
+        n_true_per_event_np  = ak.to_numpy(n_true_per_event.compute())
+        n_false_per_event_np = ak.to_numpy(n_false_per_event.compute())
+
+        # Totals across events
+        n_events          = int(n_true_per_event_np.shape[0])
+        events_with_true  = int((n_true_per_event_np  > 0).sum())
+        events_with_false = int((n_false_per_event_np > 0).sum())
+
+        print(f"Total events: {total_events_before}")
+        print(f"Total events with pf cands pdgID==11: {n_events}")
+        print(f"Events containing at least one TRUE:  {events_with_true}")
+        print(f"Events containing at least one FALSE: {events_with_false}")
+        '''
         pf_mu_mask = (highest_not_matched.constituents.pf.pdgId == 13)
         new_mask = (ak.sum(pf_mu_mask, axis=-1) > 0)
         cut_filtered_events_2j = cut_filtered_events_2j[new_mask]
@@ -341,10 +364,11 @@ if __name__ == '__main__':
         events_with_true  = int((n_true_per_event_np  > 0).sum())
         events_with_false = int((n_false_per_event_np > 0).sum())
 
-        print(f"Total events: {n_events}")
+        print(f"Total events: {total_events_before}")
+        print(f"Total events with pf cands pdgID==13: {n_events}")
         print(f"Events containing at least one TRUE:  {events_with_true}")
         print(f"Events containing at least one FALSE: {events_with_false}")
-
+        '''
 
         '''
         # plot dR between GenMuon and jets for highest not matched vs 2nd matched 
