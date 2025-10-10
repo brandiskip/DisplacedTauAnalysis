@@ -249,18 +249,22 @@ if __name__ == '__main__':
         vy = events.GenElectron.vy
         electron_Lxy = np.sqrt(vx**2 + vy**2)
         events['GenElectron'] = ak.with_field(events.GenElectron, electron_Lxy, where="Lxy")
+        GenElectron_d0 = abs((events.GenElectron.vy - events.GenVtx.y) * np.cos(events.GenElectron.phi) - \
+              (events.GenElectron.vx - events.GenVtx.x) * np.sin(events.GenElectron.phi))
+        events['GenElectron'] = ak.with_field(events.GenElectron, GenElectron_d0, where="d0")
 
         events['GenElectron'] = events.GenElectron[(events.GenElectron.pt > 20) & \
                                                     (abs(events.GenElectron.eta) < 2.4) & \
                                                     (events.GenElectron.Lxy < 100.0) & \
                                                     (events.GenElectron.distinctParent.distinctParent.pdgId == 1000015)]
 
-        '''
+        
         mask = (ak.num(events.GenVisStauTaus) == 1) & (ak.num(events.GenMuon) == 1) & (ak.num(events.GenElectron) == 0)
         events = events[mask]
         '''
         mask = (ak.num(events.GenVisStauTaus) == 1) & (ak.num(events.GenElectron) == 1) & (ak.num(events.GenMuon) == 0)
         events = events[mask]
+        '''
 
         events['staus_taus'] = ak.firsts(events.staus_taus[ak.argsort(events.staus_taus.pt, ascending=False)], axis = 2)
         staus_taus = events['staus_taus']
@@ -323,7 +327,8 @@ if __name__ == '__main__':
         cut_filtered_events_2j = cut_filtered_events_2j[evt_keep]
         total_events_before = int(ak.num(cut_filtered_events_2j, axis=0).compute())
 
-        pf_ele_mask = (highest_not_matched.constituents.pf.pdgId == 11)
+        '''
+        pf_ele_mask = (abs(highest_not_matched.constituents.pf.pdgId) == 11)
         new_mask = (ak.sum(pf_ele_mask, axis=-1) > 0)
         cut_filtered_events_2j = cut_filtered_events_2j[new_mask]
         ele_sel = (cut_filtered_events_2j.Electron.isPFcand)
@@ -346,14 +351,15 @@ if __name__ == '__main__':
         print(f"Events containing at least one TRUE:  {events_with_true}")
         print(f"Events containing at least one FALSE: {events_with_false}")
         '''
-        pf_mu_mask = (highest_not_matched.constituents.pf.pdgId == 13)
+
+        pf_mu_mask = (abs(highest_not_matched.constituents.pf.pdgId) == 13)
         new_mask = (ak.sum(pf_mu_mask, axis=-1) > 0)
         cut_filtered_events_2j = cut_filtered_events_2j[new_mask]
         mu_sel = (cut_filtered_events_2j.Muon.isGlobal & cut_filtered_events_2j.Muon.isPFcand)
 
         # Per-event counts of True/False
-        n_true_per_event  = ak.sum(mu_sel,  axis=-1)              # number of True per event
-        n_false_per_event = ak.sum(~mu_sel, axis=-1)              # number of False per event
+        n_true_per_event  = ak.sum(mu_sel,  axis=-1)              
+        n_false_per_event = ak.sum(~mu_sel, axis=-1)              
 
         # Compute to concrete arrays for counting/printing
         n_true_per_event_np  = ak.to_numpy(n_true_per_event.compute())
@@ -368,7 +374,22 @@ if __name__ == '__main__':
         print(f"Total events with pf cands pdgID==13: {n_events}")
         print(f"Events containing at least one TRUE:  {events_with_true}")
         print(f"Events containing at least one FALSE: {events_with_false}")
-        '''
+
+        no_mu_mask = ~new_mask 
+        pf_pdg_no_mu = highest_not_matched.constituents.pf.pdgId[no_mu_mask]
+        gen_mu_no_pf = gen_muon[no_mu_mask]
+        pf_pdg_no_mu_list = ak.to_list(pf_pdg_no_mu.compute())
+        pts_list  = ak.to_list(gen_mu_no_pf.pt.compute())
+        d0s_list  = ak.to_list(gen_mu_no_pf.d0.compute())
+        lxys_list = ak.to_list(gen_mu_no_pf.Lxy.compute())
+        def _fmt(v):
+            return "None" if v is None or (isinstance(v, float) and np.isnan(v)) else f"{float(v):.2f}"
+
+        print(f"Events with NO PF muon (|pdgId|==13): {len(pf_pdg_no_mu_list)}")
+        for i, (ids, pts, d0s, lxys) in enumerate(zip(pf_pdg_no_mu_list, pts_list, d0s_list, lxys_list)):
+            triples = [f"(pt={_fmt(p)}, d0={_fmt(d0)}, Lxy={_fmt(lxy)})"
+                       for p, d0, lxy in zip(pts, d0s, lxys)]
+            print(f"EventNoPFMuon[{i}] pdgIds: {ids} | GenMuon: {', '.join(triples) if triples else '[]'}")
 
         '''
         # plot dR between GenMuon and jets for highest not matched vs 2nd matched 
@@ -663,57 +684,78 @@ if __name__ == '__main__':
                 f"second_matched_eta={eta_second_matched[i]:.1f}"
             )
         '''
+
         '''
-        genmu_keep = cut_filtered_events_2j.GenMuon[evt_keep]
-        highest_matched_any_mask = ~highest_not_matched_mask           # shape (events, 1)
-        evt_keep_highest_any     = ak.flatten(highest_matched_any_mask, axis=1)  # (events,)
-        genmu_keep_high          = cut_filtered_events_2j.GenMuon[evt_keep_highest_any]
+        out_dir = os.path.join("GenElectron_all", sample_name)
+        os.makedirs(out_dir, exist_ok=True)
 
-        # helper
-        def _to_np_flat(arr):
-            if hasattr(arr, "compute"):
-                arr = arr.compute()
-            return ak.to_numpy(ak.flatten(arr, axis=None))
+        # Flatten to 1D
+        d0_all  = ak.to_numpy(ak.flatten(gen_electron.d0,  axis=None).compute())
+        Lxy_all = ak.to_numpy(ak.flatten(gen_electron.Lxy, axis=None).compute())
 
-        # Flatten values
-        genmu_d0_notHigh = _to_np_flat(genmu_keep.d0)       # highest NOT matched & second matched
-        genmu_Lxy_notHigh = _to_np_flat(genmu_keep.Lxy)
-
-        genmu_d0_high = _to_np_flat(genmu_keep_high.d0)     # highest matched (any)
-        genmu_Lxy_high = _to_np_flat(genmu_keep_high.Lxy)
-
-        # Output dir
-        sample_out = os.path.join("compare_highestNotMatched_vs_secondMatched", sample_name)
-        os.makedirs(sample_out, exist_ok=True)
-
-        # ---- d0 histogram overlay ----
+        # d0: 0–20
+        bins_d0 = np.linspace(0.0, 20.0, 41)
         plt.figure()
-        plt.hist(genmu_d0_notHigh, bins=60, range=(0, 20), histtype='step', lw=2,
-                 label="GenMuon (highest NOT matched & second matched)")
-        plt.hist(genmu_d0_high,    bins=60, range=(0, 20), histtype='step', lw=2,
-                 label="GenMuon (highest matched)")
-        plt.xlabel(r"GenMuon $|d_0|$ [cm]")
+        if d0_all.size:
+            plt.hist(d0_all, bins=bins_d0, histtype="step", lw=2, label="All GenElectrons")
+        plt.xlabel(r"GenElectron $d_0$ [cm]")
         plt.ylabel("Counts")
-        plt.title(f"{sample_name}: GenMuon $|d_0|$ — highest(not matched) vs highest(matched)")
-        plt.grid(True, ls="--", alpha=0.5)
+        plt.title(f"{sample_name}: GenElectron $d_0$ (all)")
         plt.legend()
+        plt.grid(True, ls="--", alpha=0.5)
         plt.tight_layout()
-        plt.savefig(os.path.join(sample_out, f"{sample_name}_GenMuon_d0_overlay_highestNotMatched_vs_highestMatched.pdf"))
+        plt.savefig(os.path.join(out_dir, f"{sample_name}_GenElectron_d0_all.pdf"))
         plt.close()
 
-        # ---- Lxy histogram overlay ----
+        # Lxy: 0–40
+        bins_Lxy = np.linspace(0.0, 40.0, 41)
         plt.figure()
-        plt.hist(genmu_Lxy_notHigh, bins=60, range=(0, 20.0), histtype='step', lw=2,
-                 label="GenMuon (highest NOT matched & second matched)")
-        plt.hist(genmu_Lxy_high,    bins=60, range=(0, 20.0), histtype='step', lw=2,
-                 label="GenMuon (highest matched)")
+        if Lxy_all.size:
+            plt.hist(Lxy_all, bins=bins_Lxy, histtype="step", lw=2, label="All GenElectrons")
+        plt.xlabel(r"GenElectron $L_{xy}$ [cm]")
+        plt.ylabel("Counts")
+        plt.title(f"{sample_name}: GenElectron $L_{{xy}}$ (all)")
+        plt.legend()
+        plt.grid(True, ls="--", alpha=0.5)
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, f"{sample_name}_GenElectron_Lxy_all.pdf"))
+        plt.close()
+        '''
+
+        '''
+        out_dir = os.path.join("GenMuon_all", sample_name)
+        os.makedirs(out_dir, exist_ok=True)
+
+        # Flatten to 1D
+        d0_all  = ak.to_numpy(ak.flatten(gen_muon.d0,  axis=None).compute())
+        Lxy_all = ak.to_numpy(ak.flatten(gen_muon.Lxy, axis=None).compute())
+
+        # d0: 0–20
+        bins_d0 = np.linspace(0.0, 20.0, 41)
+        plt.figure()
+        if d0_all.size:
+            plt.hist(d0_all, bins=bins_d0, histtype="step", lw=2, label="All GenMuons")
+        plt.xlabel(r"GenMuon $d_0$ [cm]")
+        plt.ylabel("Counts")
+        plt.title(f"{sample_name}: GenMuon $d_0$ (all)")
+        plt.legend()
+        plt.grid(True, ls="--", alpha=0.5)
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, f"{sample_name}_GenMuon_d0_all.pdf"))
+        plt.close()
+
+        # Lxy: 0–40
+        bins_Lxy = np.linspace(0.0, 40.0, 41)
+        plt.figure()
+        if Lxy_all.size:
+            plt.hist(Lxy_all, bins=bins_Lxy, histtype="step", lw=2, label="All GenMuons")
         plt.xlabel(r"GenMuon $L_{xy}$ [cm]")
         plt.ylabel("Counts")
-        plt.title(f"{sample_name}: GenMuon $L_{{xy}}$ — highest(not matched) vs highest(matched)")
-        plt.grid(True, ls="--", alpha=0.5)
+        plt.title(f"{sample_name}: GenMuon $L_{{xy}}$ (all)")
         plt.legend()
+        plt.grid(True, ls="--", alpha=0.5)
         plt.tight_layout()
-        plt.savefig(os.path.join(sample_out, f"{sample_name}_GenMuon_Lxy_overlay_highestNotMatched_vs_highestMatched.pdf"))
+        plt.savefig(os.path.join(out_dir, f"{sample_name}_GenMuon_Lxy_all.pdf"))
         plt.close()
         '''
 
