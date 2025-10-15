@@ -17,9 +17,9 @@ np.set_printoptions(precision=6, suppress=False, threshold=np.inf)
 filenames = {
     #'Stau_100_0p01mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-0p01mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     #'Stau_100_0p1mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-0p1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    #'Stau_100_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    #'Stau_100_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    #'Stau_100_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    'Stau_100_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    'Stau_100_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    'Stau_100_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_100_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_200_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_200_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
@@ -82,7 +82,10 @@ if __name__ == '__main__':
                 ak.flatten(events.Jet.constituents.pf[ak.argmax(events.Jet.constituents.pf[charged_sel].pt, axis=2, keepdims=True)].d0, axis = 2)))
         events['Jet'] = ak.with_field(events.Jet, dxy, where="dxy")
         dxy_err = abs(ak.flatten(events.Jet.constituents.pf[ak.argmax(events.Jet.constituents.pf[charged_sel].pt, axis=2, keepdims=True)].d0Err, axis = 2))
-        events['Jet'] = ak.with_field(events.Jet, dxy_err, where="dxy_err")
+        #events['Jet'] = ak.with_field(events.Jet, dxy_err, where="dxy_err")
+        events['Jet'] = ak.with_field(events.Jet, ak.zeros_like(events.Jet.pt) - 999.0, where="dxy_err")
+
+        
         vx = events.GenVisTau.parent.vx - events.GenVisTau.parent.parent.vx
         vy = events.GenVisTau.parent.vy - events.GenVisTau.parent.parent.vy
         Lxy = np.sqrt(vx**2 + vy**2)
@@ -112,18 +115,58 @@ if __name__ == '__main__':
                                                         (events.GenVisTau.parent.Lxy < 100.0) & \
                                                         (events.GenVisTau.pt > 20) & \
                                                         (abs(events.GenVisTau.eta) < 2.4)]
+        #print(f"GenVisStauTaus pt: {events.GenVisStauTaus.pt.compute()}")
 
         #events = events[(ak.num(events.GenVisStauTaus) > 0)]
                                                       
         events['GenMuon'] = events.GenPart[(abs(events.GenPart.pdgId) == 13) & (events.GenPart.hasFlags("isLastCopy"))] 
-        events['GenMuon'] = events.GenMuon[(events.GenMuon.pt > 20) & (abs(events.GenMuon.eta) < 2.4)]
+        #print(f"Before Selections GenMuon pt: {events.GenMuon.pt.compute()}")
+        vx = events.GenMuon.vx
+        vy = events.GenMuon.vy
+        Lxy = np.sqrt(vx**2 + vy**2)
+        events['GenMuon'] = ak.with_field(events.GenMuon, Lxy, where="Lxy")
+
+        events['GenMuon'] = events.GenMuon[(events.GenMuon.pt > 20) & \
+                                            (abs(events.GenMuon.eta) < 2.4) & \
+                                            (abs(events.GenMuon.distinctParent.distinctParent.pdgId) == 1000015)]
+        '''
+        mask = (ak.num(events.GenVisStauTaus) == 1) & (ak.num(events.GenMuon) == 1)
+        events = events[mask]
+        mask_good_events = ((events.run == 1) &
+                            (events.luminosityBlock == 59) &
+                            (events.event == 82194))
+        mask_bad_events = ((events.run == 1) &
+                            (events.luminosityBlock == 59) &
+                            (events.event == 82195))
+        
+        if ak.any(mask_good_events).compute():
+            print("GenMuon pt:", ak.to_list(events.GenMuon.pt[mask_good_events].compute()))
+            print("GenMuon parent pt:", ak.to_list(events.GenMuon.distinctParent.pt[mask_good_events].compute()))
+            print("GenMuon grandparent pt:", ak.to_list(events.GenMuon.distinctParent.distinctParent.pt[mask_good_events].compute()))
+
+        if ak.any(mask_bad_events).compute():    
+            print(f"After pt, eta, parent selections GenMuon pt: {events.GenMuon.pt[mask_bad_events].compute()}")
+            print(f"GenMuon parent pt: {events.GenMuon.distinctParent.pt[mask_bad_events].compute()}")
+            print(f"GenMuon grandparent pt: {events.GenMuon.distinctParent.distinctParent.pt[mask_bad_events].compute()}")
+        '''
         #events = events[(ak.num(events.GenMuon) > 0)]
 
-        events['GenElectron'] = events.GenPart[(abs(events.GenPart.pdgId) == 11) & (events.GenPart.hasFlags("isLastCopy"))] 
-        events['GenElectron'] = events.GenElectron[(events.GenElectron.pt > 20) & (abs(events.GenElectron.eta) < 2.4)]
+        events['GenElectron'] = events.GenPart[(abs(events.GenPart.pdgId) == 11) & (events.GenPart.hasFlags("isLastCopy"))]
+        vx = events.GenElectron.vx
+        vy = events.GenElectron.vy
+        electron_Lxy = np.sqrt(vx**2 + vy**2)
+        events['GenElectron'] = ak.with_field(events.GenElectron, electron_Lxy, where="Lxy") 
+        events['GenElectron'] = events.GenElectron[(events.GenElectron.pt > 20) & \
+                                                    (abs(events.GenElectron.eta) < 2.4) & \
+                                                    (events.GenElectron.Lxy < 100.0) & \
+                                                    (abs(events.GenElectron.distinctParent.distinctParent.pdgId) == 1000015)]
         
         mask = (ak.num(events.GenVisStauTaus) == 1) & (ak.num(events.GenMuon) == 1) & (ak.num(events.GenElectron) == 0)
         events = events[mask]
+        '''
+        mask = (ak.num(events.GenVisStauTaus) == 1) & (ak.num(events.GenElectron) == 1) & (ak.num(events.GenMuon) == 0)
+        events = events[mask]
+        '''
 
         #events['GenJet'] = events.GenJet[(events.GenJet.pt > 20) & (abs(events.GenJet.eta) < 2.4)]
 
@@ -135,14 +178,45 @@ if __name__ == '__main__':
         events['Jet'] = events.Jet[delta_r_mask(events.Jet, events.GenMuon, 0.5)]
         events['Jet'] = events.Jet[delta_r_mask(events.Jet, events.GenJet, 0.5)]
         '''
-        # print("staus_taus argsort",ak.any(ak.flatten(ak.argsort(events.staus_taus.pt, ascending=False), axis = None) == -24).compute() )
-        print("Stau tau pt at event 9400", events.staus_taus.pt.compute()[9400])
-        arg_sort = ak.argsort(events.staus_taus.pt, ascending=False)
-        print("arg sort at event 9400", arg_sort[9400].compute())
 
-        # for i in range(len(arg_sort)):
-        #     if -24 in arg_sort[i]:
-        #         print(f"Event {i}, {arg_sort[i]}, has a problem with indices")
+        if sample_name == "Stau_100_1000mm": 
+            bad = ((events.run == 1) & 
+                (events.luminosityBlock == 1083) & 
+                (events.event == 1270375)) 
+            n_bad = ak.sum(bad).compute() if hasattr(bad, "compute") else ak.sum(bad) 
+            print(f"Removing {int(n_bad)} bad event(s) from {sample_name}") 
+            events = events[~bad]
+        
+        if sample_name == "Stau_300_1mm":
+            bad = ((events.run == 1) &
+                   (events.luminosityBlock == 59) &
+                   ((events.event == 82195) | (events.event == 82376)))
+            n_bad = ak.sum(bad).compute() if hasattr(bad, "compute") else ak.sum(bad) 
+            print(f"Removing {int(n_bad)} bad event(s) from {sample_name}") 
+            events = events[~bad]
+        
+        #print("Stau tau pt at event 9400", events.staus_taus.pt.compute()[9400])
+        #arg_sort = ak.argsort(events.staus_taus.pt, ascending=False).compute()
+        #print("arg sort at event 9400", arg_sort[9400].compute())
+        '''
+        arg_sort = ak.argsort(events.staus_taus.pt, ascending=False)
+        bad_mask = ak.to_numpy(ak.any(arg_sort == -6, axis=-1).compute())
+        bad_idx  = np.flatnonzero(bad_mask)
+
+        runs  = np.asarray(events.run.compute())[bad_idx]
+        lumis = np.asarray(events.luminosityBlock.compute())[bad_idx]
+        evts  = np.asarray(events.event.compute())[bad_idx]
+
+        for i, r, l, e in zip(bad_idx, runs, lumis, evts):
+            print(f"Bad index -6 at event_idx={int(i)} run={int(r)} lumi={int(l)} event={int(e)}")
+        '''
+
+        '''
+        for i in range(len(arg_sort)):
+             if -6 in arg_sort[i]:
+                 print(f"Event {i}, {arg_sort[i]}, has a problem with indices")
+        '''
+        
         events['staus_taus'] = ak.firsts(events.staus_taus[ak.argsort(events.staus_taus.pt, ascending=False)], axis = 2)
         staus_taus = events['staus_taus']
         # print("gvt",events.GenVisStauTaus.pt.compute() )
@@ -173,7 +247,9 @@ if __name__ == '__main__':
         jets_tight = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20) & (cut_filtered_events.Jet.isTight)]
         
         # add isTightLeptonVeto to jets
-        jets_tightLeptonVeto = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20) & (cut_filtered_events.Jet.isTightLeptonVeto)]
+        jets_tightLeptonVeto = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & \
+                                (cut_filtered_events.Jet.pt > 20) & \
+                                (cut_filtered_events.Jet.isTightLeptonVeto)]
 
         '''
         if sample_name in ["Stau_300_100mm"]:
@@ -467,6 +543,7 @@ if __name__ == '__main__':
         # GenVisTau matched_leading_jets
         ##########################################################################################################
         num_vis_gen_taus = ak.sum(ak.num(cut_filtered_events.GenVisStauTaus))
+        
 
         '''
         gen_vis_taus_matched_by_pt = leading_pt_jets.nearest(cut_filtered_events.GenVisStauTaus, threshold=0.4)
@@ -492,6 +569,7 @@ if __name__ == '__main__':
         jet_matched_gen_vis_taus_score = cut_filtered_events.GenVisStauTaus.nearest(highest_score_jets, threshold=0.4)
         jet_matched_gen_vis_taus_score = ak.drop_none(jet_matched_gen_vis_taus_score)
         nMatched_jets_matched_to_gen_vis_tau_highest_score_jet = ak.sum(ak.num(jet_matched_gen_vis_taus_score))
+        
         
         '''
         #########################################################################################################
@@ -557,9 +635,7 @@ if __name__ == '__main__':
         plt.close()
         '''
 
-        print("num_vis_gen_taus", num_vis_gen_taus.compute())
-        print("nMatched_jets_matched_to_gen_vis_tau_highest_score_jet", nMatched_jets_matched_to_gen_vis_tau_highest_score_jet.compute())
-
+        
         # Compute score efficiency
         efficiency = (nMatched_jets_matched_to_gen_vis_tau_highest_score_jet / num_vis_gen_taus).compute() if num_vis_gen_taus.compute() > 0 else 0.0
       
@@ -635,8 +711,8 @@ if __name__ == '__main__':
     ax.set_yticklabels([f"{lt} mm" for lt in lifetimes])  # Lifetimes in mm
     
     ax.set_xlabel("Mass [GeV]")
-    ax.set_ylabel("Lifetime [mm]")
-    plt.title("(nMatched_highest_score_require_GenMuon)/(num_vis_gen_taus)[s, $a_{vis , j}, L, isTightLV$]", fontsize=10, pad=15)
+    ax.set_ylabel(r"$c\tau$ [mm]")
+    plt.title("(nMatched_highest_score)/(num_vis_gen_taus)[s, $a_{vis , j}, L, isTLV$]", fontsize=10, pad=15)
 
     # Loop over data dimensions and create text annotations.
     for i in range(len(lifetimes)):
