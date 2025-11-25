@@ -15,6 +15,7 @@ np.set_printoptions(precision=6, suppress=False, threshold=np.inf)
 
 # Load the file
 filenames = {
+    # Sara's sample
     #'Stau_100_0p01mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-0p01mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     #'Stau_100_0p1mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-0p1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_100_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-100_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
@@ -37,6 +38,42 @@ filenames = {
     'Stau_500_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_500_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     'Stau_500_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    # Daniel's samples
+    #'Stau_100_1mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_100_1mm/nano_0_44797_89593.root',
+    #'Stau_100_10mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_100_10mm/nano_0_41936_83872.root',
+    #'Stau_100_100mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_100_100mm/nano_0_0_46972.root',
+    #'Stau_100_1000mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_100_1000mm/nano_0_58549_117098.root',
+    #'Stau_200_1mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_200_1mm/nano_0_51035_102070.root',
+    #'Stau_200_1mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_200_1mm/nano_0_102070_153104.root',
+    #'Stau_200_10mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_200_10mm/nano_0_48361_96722.root',
+    #'Stau_200_10mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_200_10mm/nano_0_96722_145082.root',
+    #'Stau_200_100mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_200_100mm/nano_0_47878_95755.root',
+    #'Stau_200_1000mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_200_1000mm/nano_0_47476_94952.root',
+    #'Stau_200_1000mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_200_1000mm/nano_0_94952_142428.root',
+    #'Stau_300_1mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_300_1mm/nano_0_100834_151251.root',
+    #'Stau_300_1mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_300_1mm/nano_0_151251_201667.root',
+    #'Stau_300_1mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_300_1mm/nano_0_50417_100834.root',
+    #'Stau_300_10mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_300_10mm/nano_0_141522_188693.root',
+    #'Stau_300_10mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_300_10mm/nano_0_47174_94348.root',
+    #'Stau_300_10mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_300_10mm/nano_0_94348_141522.root',
+    #'Stau_300_100mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_300_100mm/nano_0_44155_88310.root',
+    #'Stau_300_100mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_300_100mm/nano_0_88310_132464.root',
+    #'Stau_300_1000mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_300_1000mm/nano_0_102908_154362.root',
+    #'Stau_300_1000mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_300_1000mm/nano_0_51454_102908.root',
+    #'Stau_500_1mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_500_1mm/nano_0_141930_189240.root',
+    #'Stau_500_1mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_500_1mm/nano_0_189240_236548.root',
+    #'Stau_500_1mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_500_1mm/nano_0_47310_94620.root',
+    #'Stau_500_1mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_500_1mm/nano_0_94620_141930.root',
+    #'Stau_500_1mm'    : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_500_1mm/nano_1_0_8918.root',
+    #'Stau_500_10mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_500_10mm/nano_0_139713_186284.root',
+    #'Stau_500_10mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_500_10mm/nano_0_186284_232853.root',
+    #'Stau_500_10mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_500_10mm/nano_0_46571_93142.root',
+    #'Stau_500_10mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_500_10mm/nano_0_93142_139713.root',
+    #'Stau_500_100mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_500_100mm/nano_0_135876_181168.root',
+    #'Stau_500_100mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_500_100mm/nano_0_45292_90584.root',
+    #'Stau_500_100mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_500_100mm/nano_0_90584_135876.root',
+    #'Stau_500_1000mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_500_1000mm/nano_0_115650_173474.root',
+    #'Stau_500_1000mm'   : 'root://cmseos.fnal.gov///store/group/lpcdisptau/dally/displacedTaus/skim/Summer22_CHS_v10/mutau/v2/Stau_500_1000mm/nano_0_57825_115650.root',  
 }
 
 PFNanoAODSchema.mixins["DisMuon"] = "Muon"
@@ -85,6 +122,22 @@ if __name__ == '__main__':
         #events['Jet'] = ak.with_field(events.Jet, dxy_err, where="dxy_err")
         events['Jet'] = ak.with_field(events.Jet, ak.zeros_like(events.Jet.pt) - 999.0, where="dxy_err")
 
+        pf = events.Jet.constituents.pf
+
+        pf_vec = ak.zip(
+            {
+                "pt":  pf.pt,
+                "eta": pf.eta,
+                "phi": pf.phi,
+                "mass": pf.mass,
+            },
+            with_name="PtEtaPhiMLorentzVector",
+            behavior=coffea.nanoevents.methods.vector.behavior,
+        )
+        pf_with_p = ak.with_field(pf, pf_vec.p, where="p")
+        consts = events.Jet.constituents
+        consts = ak.with_field(consts, pf_with_p, where="pf")
+        events["Jet"] = ak.with_field(events.Jet, consts, where="constituents")
         
         vx = events.GenVisTau.parent.vx - events.GenVisTau.parent.parent.vx
         vy = events.GenVisTau.parent.vy - events.GenVisTau.parent.parent.vy
@@ -118,7 +171,7 @@ if __name__ == '__main__':
         #print(f"GenVisStauTaus pt: {events.GenVisStauTaus.pt.compute()}")
 
         #events = events[(ak.num(events.GenVisStauTaus) > 0)]
-                                                      
+        '''                                           
         events['GenMuon'] = events.GenPart[(abs(events.GenPart.pdgId) == 13) & (events.GenPart.hasFlags("isLastCopy"))] 
         #print(f"Before Selections GenMuon pt: {events.GenMuon.pt.compute()}")
         vx = events.GenMuon.vx
@@ -129,6 +182,7 @@ if __name__ == '__main__':
         events['GenMuon'] = events.GenMuon[(events.GenMuon.pt > 20) & \
                                             (abs(events.GenMuon.eta) < 2.4) & \
                                             (abs(events.GenMuon.distinctParent.distinctParent.pdgId) == 1000015)]
+        '''
         '''
         mask = (ak.num(events.GenVisStauTaus) == 1) & (ak.num(events.GenMuon) == 1)
         events = events[mask]
@@ -150,7 +204,7 @@ if __name__ == '__main__':
             print(f"GenMuon grandparent pt: {events.GenMuon.distinctParent.distinctParent.pt[mask_bad_events].compute()}")
         '''
         #events = events[(ak.num(events.GenMuon) > 0)]
-
+        '''
         events['GenElectron'] = events.GenPart[(abs(events.GenPart.pdgId) == 11) & (events.GenPart.hasFlags("isLastCopy"))]
         vx = events.GenElectron.vx
         vy = events.GenElectron.vy
@@ -163,6 +217,7 @@ if __name__ == '__main__':
         
         mask = (ak.num(events.GenVisStauTaus) == 1) & (ak.num(events.GenMuon) == 1) & (ak.num(events.GenElectron) == 0)
         events = events[mask]
+        '''
         '''
         mask = (ak.num(events.GenVisStauTaus) == 1) & (ak.num(events.GenElectron) == 1) & (ak.num(events.GenMuon) == 0)
         events = events[mask]
@@ -178,22 +233,6 @@ if __name__ == '__main__':
         events['Jet'] = events.Jet[delta_r_mask(events.Jet, events.GenMuon, 0.5)]
         events['Jet'] = events.Jet[delta_r_mask(events.Jet, events.GenJet, 0.5)]
         '''
-
-        if sample_name == "Stau_100_1000mm": 
-            bad = ((events.run == 1) & 
-                (events.luminosityBlock == 1083) & 
-                (events.event == 1270375)) 
-            n_bad = ak.sum(bad).compute() if hasattr(bad, "compute") else ak.sum(bad) 
-            print(f"Removing {int(n_bad)} bad event(s) from {sample_name}") 
-            events = events[~bad]
-        
-        if sample_name == "Stau_300_1mm":
-            bad = ((events.run == 1) &
-                   (events.luminosityBlock == 59) &
-                   ((events.event == 82195) | (events.event == 82376)))
-            n_bad = ak.sum(bad).compute() if hasattr(bad, "compute") else ak.sum(bad) 
-            print(f"Removing {int(n_bad)} bad event(s) from {sample_name}") 
-            events = events[~bad]
         
         #print("Stau tau pt at event 9400", events.staus_taus.pt.compute()[9400])
         #arg_sort = ak.argsort(events.staus_taus.pt, ascending=False).compute()
@@ -234,6 +273,23 @@ if __name__ == '__main__':
         num_tau_mask = num_taus > 1
         cut_filtered_events = filtered_events[(num_tau_mask)]
 
+        jets_all = cut_filtered_events.Jet
+
+        '''
+        # leading charged PF candidate per jet
+        pf_all = jets_all.constituents.pf
+        charged_pf_all = pf_all[pf_all.charge != 0]
+        sorted_by_p_all = charged_pf_all[ak.argsort(charged_pf_all.p, ascending=False)]
+        lead_pf_all = ak.firsts(sorted_by_p_all)
+
+        # hcalFraction for the leading PF cand
+        lead_hcal = lead_pf_all.hcalFraction
+        lead_hcal_valid = ~ak.is_none(lead_hcal)
+
+        # jet-level mask: leading PF exists and has hcalFraction > 0.2
+        hcal_lead_gt_02_per_jet = lead_hcal_valid & (lead_hcal > 0.2)
+        '''
+
         # Select GenVisStauTaus with |eta| < 2.4 and pt > 20
         #cut_filtered_events.GenVisStauTaus = cut_filtered_events.GenVisStauTaus[(cut_filtered_events.GenVisStauTaus.pt > 20) & (abs(cut_filtered_events.GenVisStauTaus.eta) < 2.4)]
 
@@ -241,16 +297,31 @@ if __name__ == '__main__':
         
         # Select jets with |eta| < 2.4 and pt > 20
         # Use these jet selections to trouble shoot looking for how each veto effects efficiency
-        jets_all = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20)]
+        #jets_all = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20)]
 
         # add isTight to jets
-        jets_tight = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20) & (cut_filtered_events.Jet.isTight)]
-        
+        #jets_tight = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & (cut_filtered_events.Jet.pt > 20) & (cut_filtered_events.Jet.isTight)]
+    
         # add isTightLeptonVeto to jets
+        base_jet_mask = (
+            (abs(cut_filtered_events.Jet.eta) < 2.4) &
+            (cut_filtered_events.Jet.pt > 20) &
+            (cut_filtered_events.Jet.neHEF < 0.99) &
+            (cut_filtered_events.Jet.neEmEF < 0.9) &
+            ((cut_filtered_events.Jet.chMultiplicity + cut_filtered_events.Jet.neMultiplicity) > 1) &
+            (cut_filtered_events.Jet.chMultiplicity > 0) &
+            (cut_filtered_events.Jet.muEF < 0.5) &
+            (cut_filtered_events.Jet.chEmEF < 0.8)
+        )
+
+        #jets_tightLeptonVeto = cut_filtered_events.Jet[base_jet_mask & hcal_lead_gt_02_per_jet]
+
+        jets_tightLeptonVeto = cut_filtered_events.Jet[base_jet_mask]
+        '''
         jets_tightLeptonVeto = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & \
                                 (cut_filtered_events.Jet.pt > 20) & \
                                 (cut_filtered_events.Jet.isTightLeptonVeto)]
-
+        '''
         '''
         if sample_name in ["Stau_300_100mm"]:
             deltaR_matrix = cut_filtered_events.GenVisStauTaus.metric_table(cut_filtered_events.GenMuon).compute()
@@ -507,9 +578,11 @@ if __name__ == '__main__':
         plt.close()
         '''
         '''
-        #jet_matched_gen_vis_taus = cut_filtered_events.GenVisStauTaus.nearest(jets, threshold=0.4)
-        #jet_matched_gen_vis_taus = ak.drop_none(jet_matched_gen_vis_taus)
-
+        jet_matched_gen_vis_taus = cut_filtered_events.GenVisStauTaus.nearest(jets_tightLeptonVeto, threshold=0.4)
+        jet_matched_gen_vis_taus = ak.drop_none(jet_matched_gen_vis_taus)
+        nMatched_jets_matched_to_gen_vis_tau_all_jets = ak.sum(ak.num(jet_matched_gen_vis_taus))
+        '''
+        '''
         #jet_matched_gen_vis_taus = jets.nearest(cut_filtered_events.GenVisStauTaus, threshold=0.4)
         #jet_matched_gen_vis_taus = ak.drop_none(jet_matched_gen_vis_taus)
 
@@ -529,12 +602,10 @@ if __name__ == '__main__':
 
         #sorted_by_dxy_err = jets_tightLeptonVeto[ak.argsort(jets_tightLeptonVeto.dxy_err, ascending=True)]
         #lowest_dxy_err = ak.singletons(ak.firsts(sorted_by_dxy_err))
-
         '''
         sorted_by_pt = jets_tightLeptonVeto[ak.argsort(jets_tightLeptonVeto.pt, ascending=False)]
         leading_pt_jets = ak.singletons(ak.firsts(sorted_by_pt))
         '''
-        
         # Sort the selected jets by disTauTag_score1 (descending) and take the first jet per event
         sorted_by_score = jets_tightLeptonVeto[ak.argsort(jets_tightLeptonVeto.disTauTag_score1, ascending=False)]
         highest_score_jets = ak.singletons(ak.firsts(sorted_by_score))
@@ -652,7 +723,7 @@ if __name__ == '__main__':
         }
 
         # Save to JSON file
-        json_filename = "jet_highest_score_efficiency_results_isTightLV_require_GenMuon.json"
+        json_filename = "jets_highest_score_efficiency_results_isTightLV.json"
 
         # Ensure JSON file exists and is not empty before loading
         if os.path.exists(json_filename) and os.path.getsize(json_filename) > 0:
@@ -672,7 +743,7 @@ if __name__ == '__main__':
             json.dump(existing_data, f, indent=4)
 
     # Read the JSON file
-    with open("jet_highest_score_efficiency_results_isTightLV_require_GenMuon.json", "r") as f:
+    with open("jets_highest_score_efficiency_results_isTightLV.json", "r") as f:
         efficiency_data = json.load(f)
 
     # Extract unique masses and lifetimes
@@ -712,7 +783,7 @@ if __name__ == '__main__':
     
     ax.set_xlabel("Mass [GeV]")
     ax.set_ylabel(r"$c\tau$ [mm]")
-    plt.title("(nMatched_highest_score)/(num_vis_gen_taus)[s, $a_{vis , j}, L, isTLV$]", fontsize=10, pad=15)
+    plt.title("(nMatched_gen_vis_taus_highest_score_jet)/(num_vis_gen_taus)[d, $a_{vis , j}, L, isTLV$]", fontsize=10, pad=15)
 
     # Loop over data dimensions and create text annotations.
     for i in range(len(lifetimes)):
@@ -726,7 +797,7 @@ if __name__ == '__main__':
     # Add colorbar to indicate efficiency scale
     cbar = plt.colorbar(im, ax=ax)
     cbar.set_label("Efficiency")
-    output_file = "jet_highest_score_efficiency_results_isTightLV_require_GenMuon.pdf"
+    output_file = "jets_highest_score_efficiency_results_isTightLV.pdf"
     plt.savefig(output_file)
     plt.close()
     print(f"Saved efficiency plot to {output_file}")
