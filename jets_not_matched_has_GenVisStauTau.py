@@ -28,12 +28,14 @@ filenames = {
     #'Stau_200_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-200_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     #'Stau_300_1mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     #'Stau_300_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
-    'Stau_300_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_300_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     #'Stau_300_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-300_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     #'Stau_500_1mm'    : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     #'Stau_500_10mm'   : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-10mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     #'Stau_500_100mm'  : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
     #'Stau_500_1000mm' : 'root://cmseos.fnal.gov///store/user/fiorendi/displacedTaus/nanoprod/Run3_Summer22_chs_AK4PFCands_v7/SMS-TStauStau_MStau-500_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    'Stau_300_100mm'  : 'root://cmseos.fnal.gov///store/group/lpcdisptau/displacedTaus/nanoprod/summary/Run3_Summer22_chs_AK4PFCands_v13/SMS-TStauStau_MStau-300_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
+    #'Stau_300_100mm'  : 'root://cmseos.fnal.gov///store/group/lpcdisptau/displacedTaus/nanoprod/summary/Run3_Summer22_chs_AK4PFCands_v10/SMS-TStauStau_MStau-300_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/*.root',
 }
 
 PFNanoAODSchema.mixins["DisMuon"] = "Muon"
@@ -165,6 +167,38 @@ def _hist2d_pair(xarr, yarr, bins, rng, xlabel, title, outpath, log=True):
     plt.savefig(outpath)
     plt.close()
 
+def _hist2d_xy(xarr, yarr, xbins, ybins, xrange, yrange,
+               xlabel, ylabel, title, outpath, log=True):
+    # flatten + (dask-)awkward -> numpy
+    if hasattr(xarr, "compute"): xarr = xarr.compute()
+    if hasattr(yarr, "compute"): yarr = yarr.compute()
+    x = ak.to_numpy(ak.flatten(xarr, axis=None))
+    y = ak.to_numpy(ak.flatten(yarr, axis=None))
+
+    # keep finite
+    m = np.isfinite(x) & np.isfinite(y)
+    x = x[m]; y = y[m]
+    if x.size == 0 or y.size == 0:
+        print(f"[warn] empty for {title}, skipping.")
+        return
+
+    plt.figure()
+    plt.hist2d(
+        x, y,
+        bins=[xbins, ybins],
+        range=[xrange, yrange],
+        norm=mcolors.LogNorm() if log else None,
+    )
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title)
+    cbar = plt.colorbar()
+    cbar.set_label("Counts")
+    plt.tight_layout()
+    plt.savefig(outpath)
+    plt.close()
+
+
 # ---------- what to plot (field, bins, (min,max), label) ----------
 plots = [
     ("pt",                 60, (0, 750),     r"Jet $p_T$ [GeV]"),
@@ -188,7 +222,7 @@ plots = [
     ("qgl",                50, (0, 1.0),     "qgl"),
     ("puIdDisc",           60, (-1, 1),      "puIdDisc"),
     ("puId",                8, (-0.5, 7.5),  "puId"),
-    ("jetId",               8, (-0.5, 7.5),  "jetId"),
+    #("jetId",               8, (-0.5, 7.5),  "jetId"),
     ("dxy",                100, (0, 20),     "dxy [cm]"),
 ]
 
@@ -198,6 +232,7 @@ plots = [
 if __name__ == '__main__':
     for sample_name, events in samples.items():
         print(f"Processing sample: {sample_name}")
+        #print(len(events.compute()))
         # add dxy to jet fields
         charged_sel = events.Jet.constituents.pf.charge != 0
         dxy = abs(ak.where(ak.all(events.Jet.constituents.pf.charge == 0, axis = -1), -999, \
@@ -205,6 +240,37 @@ if __name__ == '__main__':
         events['Jet'] = ak.with_field(events.Jet, dxy, where="dxy")
         dxy_err = abs(ak.flatten(events.Jet.constituents.pf[ak.argmax(events.Jet.constituents.pf[charged_sel].pt, axis=2, keepdims=True)].d0Err, axis = 2))
         events['Jet'] = ak.with_field(events.Jet, dxy_err, where="dxy_err")
+
+        # build 4-vector for jets and store energy
+        Jet_vec = ak.zip(
+            {
+                "pt":  events.Jet.pt,
+                "eta": events.Jet.eta,
+                "phi": events.Jet.phi,
+                "mass": events.Jet.mass,
+            },
+            with_name="PtEtaPhiMLorentzVector",
+            behavior=coffea.nanoevents.methods.vector.behavior,
+        )
+        events["Jet"] = ak.with_field(events.Jet, Jet_vec.energy, where="energy")
+
+        pf = events.Jet.constituents.pf
+
+        pf_vec = ak.zip(
+            {
+                "pt":  pf.pt,
+                "eta": pf.eta,
+                "phi": pf.phi,
+                "mass": pf.mass,
+            },
+            with_name="PtEtaPhiMLorentzVector",
+            behavior=coffea.nanoevents.methods.vector.behavior,
+        )
+        pf_with_p = ak.with_field(pf, pf_vec.p, where="p")
+        consts = events.Jet.constituents
+        consts = ak.with_field(consts, pf_with_p, where="pf")
+        events["Jet"] = ak.with_field(events.Jet, consts, where="constituents")
+
         vx = events.GenVisTau.parent.vx - events.GenVisTau.parent.parent.vx
         vy = events.GenVisTau.parent.vy - events.GenVisTau.parent.parent.vy
         Lxy = np.sqrt(vx**2 + vy**2)
@@ -284,7 +350,12 @@ if __name__ == '__main__':
 
         jets = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & \
                                             (cut_filtered_events.Jet.pt > 20) & \
-                                            (cut_filtered_events.Jet.isTightLeptonVeto)]
+                                            (cut_filtered_events.Jet.neHEF < 0.99) & \
+                                            (cut_filtered_events.Jet.neEmEF < 0.9) & \
+                                            ((cut_filtered_events.Jet.chMultiplicity + cut_filtered_events.Jet.neMultiplicity) > 1) & \
+                                            (cut_filtered_events.Jet.chMultiplicity > 0) & \
+                                            (cut_filtered_events.Jet.muEF < 0.8) & \
+                                            (cut_filtered_events.Jet.chEmEF < 0.8)]
 
         '''
         new_var_jets = cut_filtered_events.Jet[(abs(cut_filtered_events.Jet.eta) < 2.4) & \
@@ -325,8 +396,281 @@ if __name__ == '__main__':
         gen_electron = cut_filtered_events_2j.GenElectron[evt_keep]
         gen_muon = cut_filtered_events_2j.GenMuon[evt_keep]
         cut_filtered_events_2j = cut_filtered_events_2j[evt_keep]
-        total_events_before = int(ak.num(cut_filtered_events_2j, axis=0).compute())
+        #total_events_before = int(ak.num(cut_filtered_events_2j, axis=0).compute())
 
+        '''
+        # leading PF cand (charged) for highest-score jet NOT matched
+        pf_high = highest_not_matched.constituents.pf
+        charged_pf_high = pf_high[pf_high.charge != 0]
+        sorted_by_p_high = charged_pf_high[ak.argsort(charged_pf_high.p, ascending=False)]
+        lead_pf_high = ak.firsts(sorted_by_p_high)     # first (highest-p) PF per jet
+        
+        # leading PF cand (charged) for second-highest-score jet that IS matched
+        pf_second = second_matched.constituents.pf
+        charged_pf_second = pf_second[pf_second.charge != 0]
+        sorted_by_p_second = charged_pf_second[ak.argsort(charged_pf_second.p, ascending=False)]
+        lead_pf_second = ak.firsts(sorted_by_p_second)
+        
+        # PF candidates for each jet category
+        pf_high   = lead_pf_high
+        pf_second = lead_pf_second
+
+        valid_high   = ~ak.is_none(pf_high.hcalFraction)
+        valid_second = ~ak.is_none(pf_second.hcalFraction)
+
+        hcal_mask = ((pf_high.hcalFraction   > 0.2) & (pf_second.hcalFraction > 0.2))
+
+        # apply the mask to the leading PF candidates
+        pf_high_masked   = pf_high[hcal_mask]
+        pf_second_masked = pf_second[hcal_mask]
+        '''
+
+        '''
+        # --- caloFraction distributions (leading PF cand level, masked) ---
+
+        calofrac_high   = pf_high_masked.caloFraction
+        calofrac_second = pf_second_masked.caloFraction
+
+        _overlay_two_1d(
+            calofrac_high,
+            calofrac_second,
+            bins=50,
+            rng=(0.0, 1.0),
+            xlabel="PF candidate caloFraction (lead PF, hcalFraction>0.2 on both jets)",
+            title="Leading PF caloFraction: highest (not matched) vs second (matched)\n(hcalFraction>0.2 for both leading PFs)",
+            outpath=f"caloFraction_highest_vs_second_hcalgt02_{sample_name}.pdf",
+            l1="highest (not matched)",
+            l2="second (matched)",
+        )
+
+        # --- hcalFraction distributions (leading PF cand level, masked) ---
+
+        hcalfrac_high   = pf_high_masked.hcalFraction
+        hcalfrac_second = pf_second_masked.hcalFraction
+
+        _overlay_two_1d(
+            hcalfrac_high,
+            hcalfrac_second,
+            bins=50,
+            rng=(0.0, 1.0),
+            xlabel="PF candidate hcalFraction (lead PF, hcalFraction>0.2 on both jets)",
+            title="Leading PF hcalFraction: highest (not matched) vs second (matched)\n(hcalFraction>0.2 for both leading PFs)",
+            outpath=f"hcalFraction_highest_vs_second_hcalgt02_{sample_name}.pdf",
+            l1="highest (not matched)",
+            l2="second (matched)",
+        )
+        '''
+
+        '''
+        lead_pf_high_clean   = pf_high[~ak.is_none(pf_high)]
+        lead_pf_second_clean = pf_second[~ak.is_none(pf_second)]
+
+        pdgid_high_awk   = lead_pf_high_clean.pdgId.compute()
+        pdgid_second_awk = lead_pf_second_clean.pdgId.compute()
+
+        pdgid_high_np   = ak.to_numpy(pdgid_high_awk)
+        pdgid_second_np = ak.to_numpy(pdgid_second_awk)
+
+        # absolute value if you want |PDGID|
+        abs_pdgid_high   = np.abs(pdgid_high_np)
+        abs_pdgid_second = np.abs(pdgid_second_np)
+
+        mask_high   = abs_pdgid_high   <= 211
+        mask_second = abs_pdgid_second <= 211
+
+        abs_pdgid_high_plot   = abs_pdgid_high[mask_high]
+        abs_pdgid_second_plot = abs_pdgid_second[mask_second]
+        
+        # integer-aligned bins from 1–211 (bin edges at 0.5, 1.5, ..., 210.5, 211.5)
+        abs_pdg_max_plot = 211
+
+        _overlay_two_1d(
+            abs_pdgid_high_plot,
+            abs_pdgid_second_plot,
+            bins=abs_pdg_max_plot,          # 211 bins
+            rng=(0.5, abs_pdg_max_plot + 0.5),
+            xlabel="|PDG ID| of leading charged PF candidate",
+            title="Leading charged PF |PDG ID|: highest (not matched) vs second (matched)",
+            outpath=f"leadPF_absPdgId_highest_vs_second_{sample_name}.pdf",
+            l1="highest (not matched)",
+            l2="second (matched)",
+        )
+        
+        _overlay_two_1d(
+            abs_pdgid_high_plot,
+            abs_pdgid_second_plot,
+            bins=40,
+            rng=(0.5, 40.5),
+            xlabel="|PDG ID| of leading charged PF candidate",
+            title="Leading charged PF |PDG ID| (zoomed lepton region)",
+            outpath=f"leadPF_absPdgId_highest_vs_second_zoom_{sample_name}.pdf",
+            l1="highest (not matched)",
+            l2="second (matched)",
+        )
+        '''
+
+        '''
+        # --- caloFraction distributions (PF-candidate level) ---
+
+        calofrac_high   = pf_high.caloFraction
+        calofrac_second = pf_second.caloFraction
+
+        _overlay_two_1d(
+            calofrac_high,
+            calofrac_second,
+            bins=50,
+            rng=(0.0, 1.0),
+            xlabel="PF candidate caloFraction",
+            title="PF caloFraction: highest (not matched) vs second (matched)",
+            outpath=f"caloFraction_highest_vs_second_{sample_name}.pdf",
+            l1="highest (not matched)",
+            l2="second (matched)",
+        )
+
+        # --- hcalFraction distributions (PF-candidate level) ---
+
+        hcalfrac_high   = pf_high.hcalFraction
+        hcalfrac_second = pf_second.hcalFraction
+
+        _overlay_two_1d(
+            hcalfrac_high,
+            hcalfrac_second,
+            bins=50,
+            rng=(0.0, 1.0),
+            xlabel="PF candidate hcalFraction",
+            title="PF hcalFraction: highest (not matched) vs second (matched)",
+            outpath=f"hcalFraction_highest_vs_second_{sample_name}.pdf",
+            l1="highest (not matched)",
+            l2="second (matched)",
+        )
+        '''
+
+        '''
+        n_pf_high   = ak.num(highest_not_matched.constituents.pf, axis=-1)
+        n_pf_second = ak.num(second_matched.constituents.pf, axis=-1)
+
+        _overlay_two_1d(
+            n_pf_high,
+            n_pf_second,
+            bins=80,
+            rng=(0, 80),
+            xlabel="Number of PF candidates in jet",
+            title="PF candidate multiplicity: highest (not matched) vs second (matched)",
+            outpath=f"nPFcands_highest_vs_second_{sample_name}.pdf",
+            l1="highest (not matched)",
+            l2="second (matched)",
+        )
+        '''
+
+        '''
+        # plot dR between GenElectron and jets for highest not matched vs 2nd matched
+        dR_GenElectron = highest_not_matched.metric_table(gen_electron).compute()
+        dr_ele_flat = ak.to_numpy(ak.ravel(dR_GenElectron))
+
+        dR_GenElectron_second = second_matched.metric_table(gen_electron).compute()
+        dr_ele_flat_second = ak.to_numpy(ak.ravel(dR_GenElectron_second))
+
+        out_dir = os.path.join("deltaR_GenElectron", sample_name)
+        os.makedirs(out_dir, exist_ok=True)
+
+        bins = np.linspace(0.0, 5.0, 51)
+
+        plt.figure()
+        plotted = False
+
+        if dr_ele_flat.size:
+            plt.hist(
+                dr_ele_flat,
+                bins=bins,
+                histtype="step",
+                lw=2,
+                label="highest_not_matched vs GenElectron",
+            )
+            plotted = True
+
+        if dr_ele_flat_second.size:
+            plt.hist(
+                dr_ele_flat_second,
+                bins=bins,
+                histtype="step",
+                lw=2,
+                label="second_matched vs GenElectron",
+            )
+            plotted = True
+
+        plt.xlabel(r"$\Delta R$(jet, GenElectron)")
+        plt.ylabel("Number of jet–electron pairs")
+        plt.title(f"{sample_name}: $\Delta R$ between jets and GenElectrons")
+        if plotted:
+            plt.legend()
+        plt.grid(True, ls="--", alpha=0.5)
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, f"{sample_name}_deltaR_GenElectron.pdf"))
+        plt.close()
+        '''
+
+        '''
+        # leading PF cand (charged) for highest-score jet NOT matched
+        pf_high = highest_not_matched.constituents.pf
+        charged_pf_high = pf_high[pf_high.charge != 0]
+        sorted_by_p_high = charged_pf_high[ak.argsort(charged_pf_high.p, ascending=False)]
+        lead_pf_high = ak.firsts(sorted_by_p_high)     # first (highest-p) PF per jet
+        lead_p_high = lead_pf_high.p                   # |p| of leading PF cand
+
+        # leading PF cand (charged) for second-highest-score jet that IS matched
+        pf_second = second_matched.constituents.pf
+        charged_pf_second = pf_second[pf_second.charge != 0]
+        sorted_by_p_second = charged_pf_second[ak.argsort(charged_pf_second.p, ascending=False)]
+        lead_pf_second = ak.firsts(sorted_by_p_second)
+        lead_p_second = lead_pf_second.p
+
+        # ratios: jet energy / leading-PF momentum
+        ratio_high = lead_p_high / highest_not_matched.energy
+        ratio_second = lead_p_second / second_matched.energy        
+
+        _overlay_two_1d(
+            ratio_high,
+            ratio_second,
+            bins=50,
+            rng=(0, 5),
+            xlabel=r"$p_{\mathrm{lead\ PF}} / E_{\mathrm{jet}}$",
+            title=r"Leading PF momentum / jet energy: highest (not matched) vs second (matched)",
+            outpath="p_over_E_leadPF_highest_vs_second_varBins.pdf",
+            l1="highest (not matched)",
+            l2="second (matched)",
+        )
+        '''
+        '''
+        hcalfrac_high   = lead_pf_high.hcalFraction
+        hcalfrac_second = lead_pf_second.hcalFraction
+
+        _hist2d_xy(
+            ratio_high,
+            hcalfrac_high,
+            xbins=50,
+            ybins=50,
+            xrange=(0.0, 5.0),
+            yrange=(0.0, 1.0),
+            xlabel=r"$p_{\mathrm{lead\ PF}} / E_{\mathrm{jet}}$",
+            ylabel="PF candidate hcalFraction",
+            title=r"Highest (not matched): $p_{\mathrm{lead\ PF}} / E_{\mathrm{jet}}$ vs hcalFraction",
+            outpath=f"pOverE_vs_hcal_highest_{sample_name}.pdf",
+        )
+
+        # 2D: p/E vs hcalFraction for second (matched)
+        _hist2d_xy(
+            ratio_second,
+            hcalfrac_second,
+            xbins=50,
+            ybins=50,
+            xrange=(0.0, 5.0),
+            yrange=(0.0, 1.0),
+            xlabel=r"$p_{\mathrm{lead\ PF}} / E_{\mathrm{jet}}$",
+            ylabel="PF candidate hcalFraction",
+            title=r"Second (matched): $p_{\mathrm{lead\ PF}} / E_{\mathrm{jet}}$ vs hcalFraction",
+            outpath=f"pOverE_vs_hcal_second_{sample_name}.pdf",
+        )
+        '''
         '''
         pf_ele_mask = (abs(highest_not_matched.constituents.pf.pdgId) == 11)
         new_mask = (ak.sum(pf_ele_mask, axis=-1) > 0)
@@ -351,7 +695,49 @@ if __name__ == '__main__':
         print(f"Events containing at least one TRUE:  {events_with_true}")
         print(f"Events containing at least one FALSE: {events_with_false}")
         '''
+        '''
+        pf_by_jet = highest_not_matched.constituents.pf   # shape: [event, jet, *pf*]
 
+        # Explicitly take jet0 and jet1, then concatenate along the PF-cand axis
+        pf0 = pf_by_jet[:, 0]
+        pf1 = pf_by_jet[:, 1]
+        # (defensive) replace Nones with empty lists so concatenate never chokes
+        pf0 = ak.fill_none(pf0, [], axis=0)
+        pf1 = ak.fill_none(pf1, [], axis=0)
+        pf_2jets = ak.concatenate([pf0, pf1], axis=1)     # shape: [event, *pf* from both jets]
+
+        # Gen electrons
+        gen = cut_filtered_events_2j.GenElectron
+
+        # Build 4-vectors (massless is fine for ΔR)
+        gen4 = ak.zip({"pt":gen.pt, "eta":gen.eta, "phi":gen.phi, "mass":ak.zeros_like(gen.pt)},
+                      with_name="Momentum4D")
+        pf4  = ak.zip({"pt":pf_2jets.pt, "eta":pf_2jets.eta, "phi":pf_2jets.phi, "mass":ak.zeros_like(pf_2jets.pt)},
+                      with_name="Momentum4D")
+
+        # All gen–pf pairs per event; compute ΔR and choose nearest PF per GenElectron
+        pairs = ak.cartesian({"gen_i": gen4, "pf_j": pf4, "pf_obj": pf_2jets}, axis=1)  # axis=1 = per event cross-product
+        dR = pairs["gen_i"].deltaR(pairs["pf_j"])
+        best_idx = ak.argmin(dR, axis=-1)
+
+        # For each GenElectron, the PF cand it's "constructed as"
+        best_pf = pairs["pf_obj"][ak.local_index(dR, axis=-1), best_idx]  # equivalent to "take the pf with min ΔR per GenElectron"
+        best_pdgid = best_pf.pdgId
+        best_dR = ak.min(dR, axis=-1)
+
+        # Quick check: how often is it a charged pion?
+        is_charged_pion = (ak.abs(best_pdgid) == 211)
+        frac_pion = ak.mean(is_charged_pion)
+
+        print("Fraction of GenElectrons whose nearest PF cand is a charged pion (|pdgId|==211):", float(frac_pion))
+
+        # Optional: counts by PF pdgId
+        pdg_flat = ak.to_numpy(ak.flatten(best_pdgid, axis=None))
+        vals, counts = np.unique(pdg_flat, return_counts=True)
+        print("Counts by PF pdgId:", dict(zip(vals, counts)))
+        '''
+
+        '''
         pf_mu_mask = (abs(highest_not_matched.constituents.pf.pdgId) == 13)
         new_mask = (ak.sum(pf_mu_mask, axis=-1) > 0)
         cut_filtered_events_2j = cut_filtered_events_2j[new_mask]
@@ -390,8 +776,9 @@ if __name__ == '__main__':
             triples = [f"(pt={_fmt(p)}, d0={_fmt(d0)}, Lxy={_fmt(lxy)})"
                        for p, d0, lxy in zip(pts, d0s, lxys)]
             print(f"EventNoPFMuon[{i}] pdgIds: {ids} | GenMuon: {', '.join(triples) if triples else '[]'}")
-
         '''
+
+        
         # plot dR between GenMuon and jets for highest not matched vs 2nd matched 
         highest_not_matched = highest_not_matched[highest_not_matched.muEF < 0.8]
         mu_mask = (highest_not_matched.muEF < 0.8)
@@ -433,9 +820,9 @@ if __name__ == '__main__':
             plt.legend()
         plt.grid(True, ls="--", alpha=0.5)
         plt.tight_layout()
-        plt.savefig(os.path.join(out_dir, f"{sample_name}_deltaR_GenMuon.pdf"))
+        plt.savefig(os.path.join(out_dir, f"{sample_name}_deltaR_GenMuon_v13.pdf"))
         plt.close()
-        '''
+        
 
         '''
         # --- Leading PF candidate selection for highest_not_matched jets ---
