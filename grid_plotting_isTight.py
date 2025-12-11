@@ -139,8 +139,8 @@ if __name__ == '__main__':
         consts = ak.with_field(consts, pf_with_p, where="pf")
         events["Jet"] = ak.with_field(events.Jet, consts, where="constituents")
         
-        vx = events.GenVisTau.parent.vx - events.GenVisTau.parent.parent.vx
-        vy = events.GenVisTau.parent.vy - events.GenVisTau.parent.parent.vy
+        vx = events.GenVisTau.parent.vx - events.GenVisTau.parent.distinctParent.vx
+        vy = events.GenVisTau.parent.vy - events.GenVisTau.parent.distinctParent.vy
         Lxy = np.sqrt(vx**2 + vy**2)
         parent_with_Lxy = ak.with_field(events.GenVisTau.parent, Lxy, where="Lxy")
         events['GenVisTau'] = ak.with_field(events.GenVisTau, parent_with_Lxy, where="parent")
