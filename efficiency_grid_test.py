@@ -83,14 +83,11 @@ class StauEfficiencyProcessor(processor.ProcessorABC):
         if nGen > 0:
             jets = select_jets(events_filt)
 
-            # Take the single Gen Tau per event
-            single_gen_tau = ak.firsts(gen_vis_taus)
-            
             # Find nearest Jet to this Tau (within dR 0.4)
-            matched_jet = single_gen_tau.nearest(jets, threshold=0.4)
+            matched_jet = gen_vis_taus.nearest(jets, threshold=0.4)
             
             # Count how many Taus successfully found a match
-            nMatched = ak.sum(~ak.is_none(matched_jet))
+            nMatched = ak.sum(ak.count_nonzero(matched_jet.pt, axis = -1))
 
         return {
             dataset: {
