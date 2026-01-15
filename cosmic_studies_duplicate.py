@@ -46,7 +46,6 @@ class CosmicProcessor(processor.ProcessorABC):
         # Helper to create a set of "Duplicate Study" histograms
         def make_dup_hists(label):
             return {
-                # --- EXISTING PLOTS ---
                 f"pt_{label}": Hist(
                     axis.Regular(100, 0, 200, name="lead", label="Lead $p_T$ [GeV]"),
                     axis.Regular(100, 0, 200, name="sublead", label="Sublead $p_T$ [GeV]"),
@@ -67,8 +66,6 @@ class CosmicProcessor(processor.ProcessorABC):
                     axis.Regular(2, 0, 2, name="lead", label="Lead isStandalone (0=No, 1=Yes)"),
                     axis.Regular(2, 0, 2, name="sublead", label="Sublead isStandalone (0=No, 1=Yes)"),
                 ),
-
-                # --- NEW DELTA PLOTS (For Cut Study) ---
                 f"deta_{label}": Hist(
                     axis.Regular(100, -0.1, 0.1, name="deta", label=r"$\Delta \eta (\eta_{lead} - \eta_{sub})$"),
                 ),
@@ -94,6 +91,17 @@ class CosmicProcessor(processor.ProcessorABC):
             "dt_vs_cosA_same_charge": Hist(
                 axis.Regular(50, -1.05, 1.05, name="cosA", label=r"$\cos(\alpha)$"),
                 axis.Regular(100, -100, 100, name="dt", label=r"$\Delta t$ [ns]")
+            ),
+            
+            # --- NEW PLOTS FOR DUPLICATE REMOVAL STUDY ---
+            # These are filled ONLY for Same Charge events passing the strict duplicate cuts
+            "dt_vs_cosA_same_charge_dup_removed": Hist(
+                axis.Regular(50, -1.05, 1.05, name="cosA", label=r"$\cos(\alpha)$"),
+                axis.Regular(100, -100, 100, name="dt", label=r"$\Delta t$ [ns]")
+            ),
+             "t_upper_vs_t_lower_same_charge_dup_removed": Hist(
+                axis.Regular(100, -100, 100, name="t_upper", label=r"$t_{upper}$ [ns]"),
+                axis.Regular(100, -100, 100, name="t_lower", label=r"$t_{lower}$ [ns]")
             ),
         }
         
@@ -145,44 +153,78 @@ class CosmicProcessor(processor.ProcessorABC):
         mask_opp = (lead.charge * sublead.charge) < 0
         mask_same = (lead.charge * sublead.charge) > 0
 
-        # 7. Count Events (Total Global Count)
+        # 7. Count Events
         self.output["n_same_charge"] += ak.sum(mask_same)
         self.output["n_opp_charge"] += ak.sum(mask_opp)
         
-        # 8. Define Duplicate Condition (cosAlpha > 0.99)
+        # 8. Define Duplicate Condition (cosAlpha > 0.99) - Used for old duplicate study plots
         mask_dups = cosA > 0.99
 
-        # 9. Fill Standard Histograms
+        # 9. Fill Standard Histograms (No cuts)
         self.output["dt_vs_cosA_opp_charge"].fill(cosA=cosA[mask_opp], dt=delta_t[mask_opp])
         self.output["dt_vs_cosA_same_charge"].fill(cosA=cosA[mask_same], dt=delta_t[mask_same])
 
-        # 10. Fill Duplicate Study Histograms
+        # 10. Fill Duplicate Study Histograms (Old Logic)
         def fill_dup_group(label, mask):
             final_mask = mask & mask_dups
-            
-            # Apply Mask
             l = lead[final_mask]
             s = sublead[final_mask]
             
-            # Calculate Deltas
             deta = l.eta - s.eta
-            dphi = l.delta_phi(s) # Robust delta phi calculation
+            dphi = l.delta_phi(s)
             dpt = l.pt - s.pt
 
-            # Fill Histograms
             self.output[f"pt_{label}"].fill(lead=l.pt, sublead=s.pt)
             self.output[f"eta_{label}"].fill(lead=l.eta, sublead=s.eta)
             self.output[f"phi_{label}"].fill(lead=l.phi, sublead=s.phi)
             self.output[f"isGlobal_{label}"].fill(lead=l.isGlobal, sublead=s.isGlobal)
             self.output[f"isStandalone_{label}"].fill(lead=l.isStandalone, sublead=s.isStandalone)
-            
-            # Fill NEW Delta histograms
             self.output[f"deta_{label}"].fill(deta=deta)
             self.output[f"dphi_{label}"].fill(dphi=dphi)
             self.output[f"dpt_{label}"].fill(dpt=dpt)
 
         fill_dup_group("dups_opp_charge", mask_opp)
         fill_dup_group("dups_same_charge", mask_same)
+
+        # -------------------------------------------------------------------
+        # 11. NEW DUPLICATE REMOVAL STUDY (Same Charge Only)
+        # -------------------------------------------------------------------
+        # Calculate Deltas specifically for Same Charge events
+        l_same = lead[mask_same]
+        s_same = sublead[mask_same]
+        
+        deta_same = l_same.eta - s_same.eta
+        dphi_same = l_same.delta_phi(s_same)
+        dpt_same = l_same.pt - s_same.pt
+
+        # Define STRICT Duplicate Cuts
+        # Note: We use absolute values as requested
+        cut_deta = abs(deta_same) < 0.01
+        cut_dphi = abs(dphi_same) < 0.001
+        cut_dpt = abs(dpt_same) < 0.5
+        
+        # Combine cuts
+        mask_strict_dups = cut_deta & cut_dphi & cut_dpt
+        
+        # Get variables for passing events
+        cosA_passed = cosA[mask_same][mask_strict_dups]
+        dt_passed = delta_t[mask_same][mask_strict_dups]
+        
+        # Careful with Upper/Lower variables: We need to mask them consistently
+        # upper/lower were global arrays, so we first filter by [mask_same] then by [mask_strict_dups]
+        t_upper_passed = upper.timeAtIpInOut[mask_same][mask_strict_dups]
+        t_lower_passed = lower.timeAtIpInOut[mask_same][mask_strict_dups]
+
+        # Fill New Histograms
+        self.output["dt_vs_cosA_same_charge_dup_removed"].fill(
+            cosA=cosA_passed, 
+            dt=dt_passed
+        )
+        
+        self.output["t_upper_vs_t_lower_same_charge_dup_removed"].fill(
+            t_upper=t_upper_passed,
+            t_lower=t_lower_passed
+        )
 
         return self.output
 
@@ -226,21 +268,32 @@ if __name__ == '__main__':
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     PREFIX = "cosmics_dismuon_"
 
-    # Plot ONLY the new duplicate study delta plots
-    dup_vars = ["deta", "dphi", "dpt"]
+    # Plot ONLY the new duplicate removal study plots
+    dup_removal_vars = [
+        "dt_vs_cosA_same_charge_dup_removed",
+        "t_upper_vs_t_lower_same_charge_dup_removed"
+    ]
     
+    # Also plot the original same/opp charge dt vs cosA for comparison
+    comparison_vars = [
+        "dt_vs_cosA_opp_charge",
+        "dt_vs_cosA_same_charge"
+    ]
+
     for key, hist_obj in out.items():
         if isinstance(hist_obj, int): continue
         
-        # Check if the histogram name starts with one of our delta variables
-        if any(key.startswith(v) for v in dup_vars):
+        # Check if key is in either list
+        if key in dup_removal_vars or key in comparison_vars:
             save_2d_plot(hist_obj, key, "Cosmic", PREFIX, OUTPUT_DIR)
 
     # OLD Loop Commented Out
     '''
+    dup_vars = ["deta", "dphi", "dpt"]
     for key, hist_obj in out.items():
-        if isinstance(hist_obj, int): continue # Skip the counters
-        save_2d_plot(hist_obj, key, "Cosmic", PREFIX, OUTPUT_DIR)
+        if isinstance(hist_obj, int): continue
+        if any(key.startswith(v) for v in dup_vars):
+            save_2d_plot(hist_obj, key, "Cosmic", PREFIX, OUTPUT_DIR)
     '''
 
     print("Done!")
