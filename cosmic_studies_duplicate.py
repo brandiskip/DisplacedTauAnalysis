@@ -12,18 +12,18 @@ import pickle
 
 # --- Plotting Helper Function ---
 def save_2d_plot(h, var_name, sample_name, PREFIX, OUTPUT_DIR):
-    """Plots a 2D histogram with a logarithmic color scale."""
+    """Plots a 2D histogram with a logarithmic color scale, or 1D if axes=1."""
     if h.sum() == 0:
         print(f"Skipping {var_name} (Histogram is empty)")
         return
 
     fig, ax = plt.subplots(figsize=(8, 7))
     
-    # Check if this is a boolean/integer ID plot (small axes) to skip LogNorm if needed
+    # Check if this is a boolean/integer ID plot (small axes) to skip LogNorm
     is_boolean = h.axes[0].size <= 2
     norm = mcolors.LogNorm(vmin=1) if not is_boolean else None
 
-    # For 1D histograms (like the new delta plots), use plot1d
+    # For 1D histograms (like the delta plots), use plot1d
     if len(h.axes) == 1:
         h.plot1d(ax=ax)
         ax.set_ylabel("Events")
@@ -44,8 +44,10 @@ class CosmicProcessor(processor.ProcessorABC):
     def __init__(self):
         
         # Helper to create a set of "Duplicate Study" histograms
+        # These are filled for events with cos(alpha) >= 0.99
         def make_dup_hists(label):
             return {
+                # --- V3: STANDARD KINEMATICS (Restored) ---
                 f"pt_{label}": Hist(
                     axis.Regular(100, 0, 200, name="lead", label="Lead $p_T$ [GeV]"),
                     axis.Regular(100, 0, 200, name="sublead", label="Sublead $p_T$ [GeV]"),
@@ -66,6 +68,8 @@ class CosmicProcessor(processor.ProcessorABC):
                     axis.Regular(2, 0, 2, name="lead", label="Lead isStandalone (0=No, 1=Yes)"),
                     axis.Regular(2, 0, 2, name="sublead", label="Sublead isStandalone (0=No, 1=Yes)"),
                 ),
+
+                # --- V4: BROAD DELTA PLOTS ---
                 f"deta_{label}": Hist(
                     axis.Regular(100, -0.1, 0.1, name="deta", label=r"$\Delta \eta (\eta_{lead} - \eta_{sub})$"),
                 ),
@@ -75,26 +79,46 @@ class CosmicProcessor(processor.ProcessorABC):
                 f"dpt_{label}": Hist(
                     axis.Regular(100, -10, 10, name="dpt", label=r"$\Delta p_T (p_{T,lead} - p_{T,sub})$ [GeV]"),
                 ),
+
+                # --- V7: ZOOMED DELTA PLOTS (For Cut Definition) ---
+                f"deta_zoom_{label}": Hist(
+                    axis.Regular(100, -0.025, 0.025, name="deta", label=r"Zoomed $\Delta \eta$"),
+                ),
+                f"dphi_zoom_{label}": Hist(
+                    axis.Regular(100, -0.01, 0.01, name="dphi", label=r"Zoomed $\Delta \phi$"),
+                ),
+                f"dpt_zoom_{label}": Hist(
+                    axis.Regular(100, -1.0, 1.0, name="dpt", label=r"Zoomed $\Delta p_T$ [GeV]"),
+                ),
             }
 
         # Define histograms
         self.output = {
-            # Event Counters (Initialized to 0)
+            # Event Counters
             "n_same_charge": 0,
             "n_opp_charge": 0,
 
-            # Standard Plots
+            # --- V1 & V2: STANDARD SIGNAL/CONTROL PLOTS ---
             "dt_vs_cosA_opp_charge": Hist(
                 axis.Regular(50, -1.05, 1.05, name="cosA", label=r"$\cos(\alpha)$"),
                 axis.Regular(100, -100, 100, name="dt", label=r"$\Delta t$ [ns]")
             ),
+            "pt_lead_vs_sublead_opp_charge": Hist(
+                axis.Regular(100, 0, 200, name="lead_pt", label="Leading Displaced Muon $p_T$ [GeV]"),
+                axis.Regular(100, 0, 200, name="sublead_pt", label="Subleading Displaced Muon $p_T$ [GeV]"),
+            ),
+            
             "dt_vs_cosA_same_charge": Hist(
                 axis.Regular(50, -1.05, 1.05, name="cosA", label=r"$\cos(\alpha)$"),
                 axis.Regular(100, -100, 100, name="dt", label=r"$\Delta t$ [ns]")
             ),
-            
-            # --- NEW PLOTS FOR DUPLICATE REMOVAL STUDY ---
-            # These are filled ONLY for Same Charge events passing the strict duplicate cuts
+            "pt_lead_vs_sublead_same_charge": Hist(
+                axis.Regular(100, 0, 200, name="lead_pt", label="Leading Displaced Muon $p_T$ [GeV]"),
+                axis.Regular(100, 0, 200, name="sublead_pt", label="Subleading Displaced Muon $p_T$ [GeV]"),
+            ),
+
+            # --- V6: STRICT DUPLICATE REMOVAL CHECK ---
+            # These verify the cleaned region after applying cuts
             "dt_vs_cosA_same_charge_dup_removed": Hist(
                 axis.Regular(50, -1.05, 1.05, name="cosA", label=r"$\cos(\alpha)$"),
                 axis.Regular(100, -100, 100, name="dt", label=r"$\Delta t$ [ns]")
@@ -112,7 +136,7 @@ class CosmicProcessor(processor.ProcessorABC):
     def process(self, events):
         dataset = events.metadata['dataset']
         
-        # 1. Attach vector behavior AND ID variables
+        # 1. Attach vector behavior
         events["DisMuon"] = ak.zip(
             {
                 "pt": events.DisMuon.pt,
@@ -132,24 +156,24 @@ class CosmicProcessor(processor.ProcessorABC):
         mask_2dis = ak.num(events.DisMuon) >= 2
         events = events[mask_2dis]
         
-        # 3. Sort by Pt (Leading vs Subleading)
+        # 3. Sort by Pt
         sorted_pt = events.DisMuon[ak.argsort(events.DisMuon.pt, axis=1, ascending=False)]
         lead = sorted_pt[:, 0]
         sublead = sorted_pt[:, 1]
 
-        # 4. Sort by Phi (Upper vs Lower) for Timing
+        # 4. Sort by Phi (for timing)
         sorted_phi = events.DisMuon[ak.argsort(events.DisMuon.phi, axis=1, ascending=False)]
         upper = sorted_phi[:, 0]
         lower = sorted_phi[:, 1]
 
         # 5. Calculate Variables
         delta_t = (upper.timeAtIpInOut - lower.timeAtIpInOut)
-        
+
         dot_product = lead.px * sublead.px + lead.py * sublead.py + lead.pz * sublead.pz
         denominator = lead.p * sublead.p
         cosA = ak.where(denominator != 0, dot_product / denominator, -1000.0)
 
-        # 6. Define Masks (Charge Only)
+        # 6. Define Masks
         mask_opp = (lead.charge * sublead.charge) < 0
         mask_same = (lead.charge * sublead.charge) > 0
 
@@ -157,15 +181,21 @@ class CosmicProcessor(processor.ProcessorABC):
         self.output["n_same_charge"] += ak.sum(mask_same)
         self.output["n_opp_charge"] += ak.sum(mask_opp)
         
-        # 8. Define Duplicate Condition (cosAlpha > 0.99) - Used for old duplicate study plots
-        mask_dups = cosA > 0.99
+        # -----------------------------------------------------
+        # 8. FILL STANDARD PLOTS (V1 & V2)
+        # -----------------------------------------------------
+        self.output["dt_vs_cosA_opp_charge"].fill(cosA=cosA[mask_opp], dt=delta_t[mask_opp])
+        self.output["pt_lead_vs_sublead_opp_charge"].fill(lead_pt=lead.pt[mask_opp], sublead_pt=sublead.pt[mask_opp])
 
-        # 9. Fill Standard Histograms (No cuts)
-        # self.output["dt_vs_cosA_opp_charge"].fill(cosA=cosA[mask_opp], dt=delta_t[mask_opp])
-        # self.output["dt_vs_cosA_same_charge"].fill(cosA=cosA[mask_same], dt=delta_t[mask_same])
+        self.output["dt_vs_cosA_same_charge"].fill(cosA=cosA[mask_same], dt=delta_t[mask_same])
+        self.output["pt_lead_vs_sublead_same_charge"].fill(lead_pt=lead.pt[mask_same], sublead_pt=sublead.pt[mask_same])
 
-        # 10. Fill Duplicate Study Histograms (Old Logic)
-        '''
+        # -----------------------------------------------------
+        # 9. FILL DUPLICATE STUDY PLOTS (V3, V4, V7)
+        # -----------------------------------------------------
+        # Define Duplicate Region (cosAlpha >= 0.99)
+        mask_dups = cosA >= 0.99
+
         def fill_dup_group(label, mask):
             final_mask = mask & mask_dups
             l = lead[final_mask]
@@ -175,22 +205,29 @@ class CosmicProcessor(processor.ProcessorABC):
             dphi = l.delta_phi(s)
             dpt = l.pt - s.pt
 
+            # V3 Standard
             self.output[f"pt_{label}"].fill(lead=l.pt, sublead=s.pt)
             self.output[f"eta_{label}"].fill(lead=l.eta, sublead=s.eta)
             self.output[f"phi_{label}"].fill(lead=l.phi, sublead=s.phi)
             self.output[f"isGlobal_{label}"].fill(lead=l.isGlobal, sublead=s.isGlobal)
             self.output[f"isStandalone_{label}"].fill(lead=l.isStandalone, sublead=s.isStandalone)
+            
+            # V4 Broad Deltas
             self.output[f"deta_{label}"].fill(deta=deta)
             self.output[f"dphi_{label}"].fill(dphi=dphi)
             self.output[f"dpt_{label}"].fill(dpt=dpt)
 
-        fill_dup_group("dups_opp_charge", mask_opp)
-        fill_dup_group("dups_same_charge", mask_same)
-        '''
+            # V7 Zoomed Deltas
+            self.output[f"deta_zoom_{label}"].fill(deta=deta)
+            self.output[f"dphi_zoom_{label}"].fill(dphi=dphi)
+            self.output[f"dpt_zoom_{label}"].fill(dpt=dpt)
 
-        # -------------------------------------------------------------------
-        # 11. NEW DUPLICATE REMOVAL STUDY (Same Charge Only)
-        # -------------------------------------------------------------------
+        fill_dup_group("dups_same_charge", mask_same)
+        fill_dup_group("dups_opp_charge", mask_opp) 
+
+        # -----------------------------------------------------
+        # 10. FILL STRICT REMOVAL PLOTS (V6)
+        # -----------------------------------------------------
         # Calculate Deltas specifically for Same Charge events
         l_same = lead[mask_same]
         s_same = sublead[mask_same]
@@ -199,31 +236,24 @@ class CosmicProcessor(processor.ProcessorABC):
         dphi_same = l_same.delta_phi(s_same)
         dpt_same = l_same.pt - s_same.pt
 
-        # Define STRICT Duplicate Cuts
+        # Strict Cuts
         cut_deta = abs(deta_same) < 0.01
         cut_dphi = abs(dphi_same) < 0.001
         cut_dpt = abs(dpt_same) < 0.5
         
-        # This defines what a duplicate IS
         is_duplicate = cut_deta & cut_dphi & cut_dpt
+        mask_keep = ~is_duplicate # VETO duplicates
 
-        # We want to KEEP events that are NOT (~) duplicates
-        mask_keep = ~is_duplicate 
+        # Fill Histograms for CLEANED events
+        self.output["dt_vs_cosA_same_charge_dup_removed"].fill(
+            cosA=cosA[mask_same][mask_keep], 
+            dt=delta_t[mask_same][mask_keep]
+        )
         
-        # Get variables for KEPT events
-        cosA_passed = cosA[mask_same][mask_keep]
-        dt_passed = delta_t[mask_same][mask_keep]
-        
-        # Careful with Upper/Lower variables: We need to mask them consistently
+        # Careful with Upper/Lower logic for timing plots
         t_upper_passed = upper.timeAtIpInOut[mask_same][mask_keep]
         t_lower_passed = lower.timeAtIpInOut[mask_same][mask_keep]
 
-        # Fill New Histograms
-        self.output["dt_vs_cosA_same_charge_dup_removed"].fill(
-            cosA=cosA_passed, 
-            dt=dt_passed
-        )
-        
         self.output["t_upper_vs_t_lower_same_charge_dup_removed"].fill(
             t_upper=t_upper_passed,
             t_lower=t_lower_passed
@@ -260,7 +290,7 @@ if __name__ == '__main__':
 
     # 3. Print Results
     print("\n" + "="*40)
-    print("EVENT COUNT RESULTS (Global - No cosA cut)")
+    print("EVENT COUNT RESULTS")
     print("="*40)
     print(f"Same Charge Events:     {out['n_same_charge']}")
     print(f"Opposite Charge Events: {out['n_opp_charge']}")
@@ -271,23 +301,9 @@ if __name__ == '__main__':
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     PREFIX = "cosmics_dismuon_"
 
-    # Plot ONLY the new duplicate removal study plots
-    dup_removal_vars = [
-        "dt_vs_cosA_same_charge_dup_removed",
-        "t_upper_vs_t_lower_same_charge_dup_removed"
-    ]
-    
-    # Also plot the original same/opp charge dt vs cosA for comparison
-    comparison_vars = [
-        # "dt_vs_cosA_opp_charge",   <-- Commented out as requested
-        # "dt_vs_cosA_same_charge"   <-- Commented out as requested
-    ]
-
+    # Plot EVERYTHING
     for key, hist_obj in out.items():
         if isinstance(hist_obj, int): continue
-        
-        # Check if key is in the removal list
-        if key in dup_removal_vars:
-            save_2d_plot(hist_obj, key, "Cosmic", PREFIX, OUTPUT_DIR)
+        save_2d_plot(hist_obj, key, "Cosmic", PREFIX, OUTPUT_DIR)
 
     print("Done!")
