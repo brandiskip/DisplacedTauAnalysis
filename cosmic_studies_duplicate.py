@@ -161,10 +161,11 @@ class CosmicProcessor(processor.ProcessorABC):
         mask_dups = cosA > 0.99
 
         # 9. Fill Standard Histograms (No cuts)
-        self.output["dt_vs_cosA_opp_charge"].fill(cosA=cosA[mask_opp], dt=delta_t[mask_opp])
-        self.output["dt_vs_cosA_same_charge"].fill(cosA=cosA[mask_same], dt=delta_t[mask_same])
+        # self.output["dt_vs_cosA_opp_charge"].fill(cosA=cosA[mask_opp], dt=delta_t[mask_opp])
+        # self.output["dt_vs_cosA_same_charge"].fill(cosA=cosA[mask_same], dt=delta_t[mask_same])
 
         # 10. Fill Duplicate Study Histograms (Old Logic)
+        '''
         def fill_dup_group(label, mask):
             final_mask = mask & mask_dups
             l = lead[final_mask]
@@ -185,6 +186,7 @@ class CosmicProcessor(processor.ProcessorABC):
 
         fill_dup_group("dups_opp_charge", mask_opp)
         fill_dup_group("dups_same_charge", mask_same)
+        '''
 
         # -------------------------------------------------------------------
         # 11. NEW DUPLICATE REMOVAL STUDY (Same Charge Only)
@@ -198,22 +200,23 @@ class CosmicProcessor(processor.ProcessorABC):
         dpt_same = l_same.pt - s_same.pt
 
         # Define STRICT Duplicate Cuts
-        # Note: We use absolute values as requested
         cut_deta = abs(deta_same) < 0.01
         cut_dphi = abs(dphi_same) < 0.001
         cut_dpt = abs(dpt_same) < 0.5
         
-        # Combine cuts
-        mask_strict_dups = cut_deta & cut_dphi & cut_dpt
+        # This defines what a duplicate IS
+        is_duplicate = cut_deta & cut_dphi & cut_dpt
+
+        # We want to KEEP events that are NOT (~) duplicates
+        mask_keep = ~is_duplicate 
         
-        # Get variables for passing events
-        cosA_passed = cosA[mask_same][mask_strict_dups]
-        dt_passed = delta_t[mask_same][mask_strict_dups]
+        # Get variables for KEPT events
+        cosA_passed = cosA[mask_same][mask_keep]
+        dt_passed = delta_t[mask_same][mask_keep]
         
         # Careful with Upper/Lower variables: We need to mask them consistently
-        # upper/lower were global arrays, so we first filter by [mask_same] then by [mask_strict_dups]
-        t_upper_passed = upper.timeAtIpInOut[mask_same][mask_strict_dups]
-        t_lower_passed = lower.timeAtIpInOut[mask_same][mask_strict_dups]
+        t_upper_passed = upper.timeAtIpInOut[mask_same][mask_keep]
+        t_lower_passed = lower.timeAtIpInOut[mask_same][mask_keep]
 
         # Fill New Histograms
         self.output["dt_vs_cosA_same_charge_dup_removed"].fill(
@@ -276,24 +279,15 @@ if __name__ == '__main__':
     
     # Also plot the original same/opp charge dt vs cosA for comparison
     comparison_vars = [
-        "dt_vs_cosA_opp_charge",
-        "dt_vs_cosA_same_charge"
+        # "dt_vs_cosA_opp_charge",   <-- Commented out as requested
+        # "dt_vs_cosA_same_charge"   <-- Commented out as requested
     ]
 
     for key, hist_obj in out.items():
         if isinstance(hist_obj, int): continue
         
-        # Check if key is in either list
-        if key in dup_removal_vars or key in comparison_vars:
+        # Check if key is in the removal list
+        if key in dup_removal_vars:
             save_2d_plot(hist_obj, key, "Cosmic", PREFIX, OUTPUT_DIR)
-
-    # OLD Loop Commented Out
-    '''
-    dup_vars = ["deta", "dphi", "dpt"]
-    for key, hist_obj in out.items():
-        if isinstance(hist_obj, int): continue
-        if any(key.startswith(v) for v in dup_vars):
-            save_2d_plot(hist_obj, key, "Cosmic", PREFIX, OUTPUT_DIR)
-    '''
 
     print("Done!")
