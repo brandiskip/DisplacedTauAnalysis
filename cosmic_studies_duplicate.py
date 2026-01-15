@@ -7,13 +7,16 @@ import hist
 from hist import Hist, axis
 from coffea import processor
 from coffea.nanoevents import PFNanoAODSchema
-from coffea.analysis_tools import PackedSelection
 import coffea.nanoevents.methods.vector as vector
 import pickle
 
 # --- Plotting Helper Function ---
 def save_2d_plot(h, var_name, sample_name, PREFIX, OUTPUT_DIR):
     """Plots a 2D histogram with a logarithmic color scale."""
+    if h.sum() == 0:
+        print(f"Skipping {var_name} (Histogram is empty)")
+        return
+
     fig, ax = plt.subplots(figsize=(8, 7))
     
     h.plot2d(
@@ -33,8 +36,9 @@ def save_2d_plot(h, var_name, sample_name, PREFIX, OUTPUT_DIR):
 # --- The Processor Class ---
 class CosmicProcessor(processor.ProcessorABC):
     def __init__(self):
-        # Define histograms
+        # Define histograms for BOTH cases (Same Charge AND Opposite Charge)
         self.output = {
+            # Case 1: Opposite Charge
             "dt_vs_cosA_opp_charge": Hist(
                 axis.Regular(50, -1.05, 1.05, name="cosA", label=r"$\cos(\alpha)$"),
                 axis.Regular(100, -100, 100, name="dt", label=r"$\Delta t = t_{upper} - t_{lower}$ [ns]")
@@ -43,7 +47,18 @@ class CosmicProcessor(processor.ProcessorABC):
                 axis.Regular(100, 0, 200, name="lead_pt", label="Leading Displaced Muon $p_T$ [GeV]"),
                 axis.Regular(100, 0, 200, name="sublead_pt", label="Subleading Displaced Muon $p_T$ [GeV]"),
             ),
-            # Placeholder for the commented out histogram logic (if you re-enable it)
+            
+            # Case 2: Same Charge
+            "dt_vs_cosA_same_charge": Hist(
+                axis.Regular(50, -1.05, 1.05, name="cosA", label=r"$\cos(\alpha)$"),
+                axis.Regular(100, -100, 100, name="dt", label=r"$\Delta t = t_{upper} - t_{lower}$ [ns]")
+            ),
+            "pt_lead_vs_sublead_same_charge": Hist(
+                axis.Regular(100, 0, 200, name="lead_pt", label="Leading Displaced Muon $p_T$ [GeV]"),
+                axis.Regular(100, 0, 200, name="sublead_pt", label="Subleading Displaced Muon $p_T$ [GeV]"),
+            ),
+
+            # Placeholder for veto logic
             "dt_vs_cosA_veto": Hist(
                 axis.Regular(50, -1.05, 1.05, name="cosA", label=r"$\cos(\alpha)$"),
                 axis.Regular(100, -100, 100, name="dt", label=r"$\Delta t = t_{upper} - t_{lower}$ [ns]")
@@ -53,8 +68,7 @@ class CosmicProcessor(processor.ProcessorABC):
     def process(self, events):
         dataset = events.metadata['dataset']
         
-        # 1. Attach vector behavior to DisMuon so we can use .px, .py, .pz
-        # Note: In PFNanoAODSchema, we usually just map the collection
+        # 1. Attach vector behavior
         events["DisMuon"] = ak.zip(
             {
                 "pt": events.DisMuon.pt,
@@ -69,110 +83,58 @@ class CosmicProcessor(processor.ProcessorABC):
             behavior=vector.behavior,
         )
 
-        # ---------------------------------------------------------
-        # COMMENTED OUT LOGIC (Replicated from your script)
-        # ---------------------------------------------------------
-        '''
-        # Multiplicity filter (Need at least 2 muons)
-        mask_2dis = ak.num(events.DisMuon) >= 2
-        events_veto = events[mask_2dis]
-        
-        sorted_dis_muons = events_veto.DisMuon[ak.argsort(events_veto.DisMuon.pt, axis=1, ascending=False)]
-        leading_dis_muon_reco = sorted_dis_muons[:, 0]
-        subleading_dis_muon_reco = sorted_dis_muons[:, 1]
-
-        sorted_DisMuons_phi = events_veto.DisMuon[ak.argsort(events_veto.DisMuon.phi, axis=1, ascending=False)]
-        upper_muon = sorted_DisMuons_phi[:, 0]
-        lower_muon = sorted_DisMuons_phi[:, 1]
-
-        # dof mask
-        ndof_quality = (upper_muon.timeNDof > 7) & (lower_muon.timeNDof > 7)
-        
-        # Calculate Delta_t and create mask
-        delta_t_for_mask = (upper_muon.timeAtIpInOut - lower_muon.timeAtIpInOut)
-        rejection_condition = (delta_t_for_mask < -20.0) & ndof_quality
-
-        # Calculate cosAlpha
-        dot_product_temp = leading_dis_muon_reco.px * subleading_dis_muon_reco.px + \
-                           leading_dis_muon_reco.py * subleading_dis_muon_reco.py + \
-                           leading_dis_muon_reco.pz * subleading_dis_muon_reco.pz
-        den_temp = leading_dis_muon_reco.p * subleading_dis_muon_reco.p
-        cosA_temp = ak.where(den_temp != 0, dot_product_temp / den_temp, -1000.0)
-
-        # Final Mask logic
-        mask_same_charge = (leading_dis_muon_reco.charge * subleading_dis_muon_reco.charge) > 0
-        final_mask = mask_same_charge & (~rejection_condition) & (cosA_temp >= -0.99)
-        events_veto = events_veto[final_mask]
-
-        # RE-DERIVE variables from filtered events
-        sorted_phi_final = events_veto.DisMuon[ak.argsort(events_veto.DisMuon.phi, axis=1, ascending=False)]
-        u_muon_final = sorted_phi_final[:, 0]
-        l_muon_final = sorted_phi_final[:, 1]
-
-        delta_t = (u_muon_final.timeAtIpInOut - l_muon_final.timeAtIpInOut)
-
-        # Re-calc cosA for plotting (using filtered events)
-        sorted_pt_final = events_veto.DisMuon[ak.argsort(events_veto.DisMuon.pt, axis=1, ascending=False)]
-        lead_final = sorted_pt_final[:, 0]
-        subl_final = sorted_pt_final[:, 1]
-        
-        dot_prod_final = lead_final.px * subl_final.px + lead_final.py * subl_final.py + lead_final.pz * subl_final.pz
-        den_final = lead_final.p * subl_final.p
-        flat_cosA = ak.where(den_final != 0, dot_prod_final / den_final, -1000.0)
-
-        self.output["dt_vs_cosA_veto"].fill(cosA=flat_cosA, dt=delta_t)
-        '''
-
-        # ---------------------------------------------------------
-        # ACTIVE LOGIC
-        # ---------------------------------------------------------
-        
-        # Filter for at least 2 muons
+        # 2. Basic Filtering (Must have at least 2 muons)
         mask_2dis = ak.num(events.DisMuon) >= 2
         events = events[mask_2dis]
         
-        sorted_dis_muons = events.DisMuon[ak.argsort(events.DisMuon.pt, ascending=False)]
-        leading_dis_muon_reco = sorted_dis_muons[:, 0]
-        subleading_dis_muon_reco = sorted_dis_muons[:, 1]
+        # 3. Identify Muons (Sorting)
+        # Sort by Pt for kinematic plots (Leading vs Subleading)
+        sorted_pt = events.DisMuon[ak.argsort(events.DisMuon.pt, axis=1, ascending=False)]
+        lead = sorted_pt[:, 0]
+        sublead = sorted_pt[:, 1]
+
+        # Sort by Phi for timing (Upper vs Lower)
+        sorted_phi = events.DisMuon[ak.argsort(events.DisMuon.phi, axis=1, ascending=False)]
+        upper = sorted_phi[:, 0]
+        lower = sorted_phi[:, 1]
+
+        # 4. Calculate Variables for ALL events
+        # Delta T
+        delta_t = (upper.timeAtIpInOut - lower.timeAtIpInOut)
         
-        # mask_same_charge_dis = (leading_dis_muon_reco.charge * subleading_dis_muon_reco.charge) > 0
-        # events = events[mask_same_charge_dis]
+        # Cos Alpha
+        dot_product = lead.px * sublead.px + lead.py * sublead.py + lead.pz * sublead.pz
+        denominator = lead.p * sublead.p
+        cosA = ak.where(denominator != 0, dot_product / denominator, -1000.0)
 
-        mask_diff_charge_dis = (leading_dis_muon_reco.charge * subleading_dis_muon_reco.charge) < 0
-        events = events[mask_diff_charge_dis]
-
-        # Re-sort after filtering
-        sorted_dis_muons = events.DisMuon[ak.argsort(events.DisMuon.pt, axis=1, ascending=False)]
-        leading_dis_muon_reco = sorted_dis_muons[:, 0]
-        subleading_dis_muon_reco = sorted_dis_muons[:, 1]
-
-        # Sorted by phi for timing (Upper vs Lower)
-        sorted_DisMuons_phi = events.DisMuon[ak.argsort(events.DisMuon.phi, axis=1, ascending=False)]
-        upper_muon = sorted_DisMuons_phi[:, 0]
-        lower_muon = sorted_DisMuons_phi[:, 1]
-
-        time_upper = upper_muon.timeAtIpInOut
-        time_lower = lower_muon.timeAtIpInOut
-        delta_t = (time_upper - time_lower)
-
-        # Calculate CosAlpha
-        dot_product_dis = leading_dis_muon_reco.px * subleading_dis_muon_reco.px + \
-                          leading_dis_muon_reco.py * subleading_dis_muon_reco.py + \
-                          leading_dis_muon_reco.pz * subleading_dis_muon_reco.pz
-
-        den_dis = leading_dis_muon_reco.p * subleading_dis_muon_reco.p
-
-        cosA_dis = ak.where(den_dis != 0, dot_product_dis / den_dis, -1000.0)
+        # 5. Define Split Masks
+        # We do not filter 'events' here. We just create boolean masks.
+        # Opposite Charge: q1 * q2 < 0
+        mask_opp = (lead.charge * sublead.charge) < 0
         
-        # Fill Histograms
+        # Same Charge: q1 * q2 > 0
+        mask_same = (lead.charge * sublead.charge) > 0
+
+        # 6. Fill Histograms using the Masks
+        
+        # --- CASE 1: Opposite Charge ---
         self.output["dt_vs_cosA_opp_charge"].fill(
-            cosA=cosA_dis, 
-            dt=delta_t
+            cosA=cosA[mask_opp], 
+            dt=delta_t[mask_opp]
         )
-        
         self.output["pt_lead_vs_sublead_opp_charge"].fill(
-            lead_pt=leading_dis_muon_reco.pt, 
-            sublead_pt=subleading_dis_muon_reco.pt
+            lead_pt=lead.pt[mask_opp], 
+            sublead_pt=sublead.pt[mask_opp]
+        )
+
+        # --- CASE 2: Same Charge ---
+        self.output["dt_vs_cosA_same_charge"].fill(
+            cosA=cosA[mask_same], 
+            dt=delta_t[mask_same]
+        )
+        self.output["pt_lead_vs_sublead_same_charge"].fill(
+            lead_pt=lead.pt[mask_same], 
+            sublead_pt=sublead.pt[mask_same]
         )
 
         return self.output
@@ -181,17 +143,15 @@ class CosmicProcessor(processor.ProcessorABC):
         return accumulator
 
 
-# --- Main Execution Block ---
 if __name__ == '__main__':
     
-    # 1. Load the Preprocessed Data (The .pkl file you made)
-    # Make sure this path matches exactly where your preprocess script saved it
+    # 1. Load Preprocessed Data
     pkl_file_path = "samples/Summer22_CHS_v14_Cosmic/Cosmic_preprocessed.pkl"
     
     with open(pkl_file_path, "rb") as f:
         runnable = pickle.load(f)
 
-    # 2. Run the Processor
+    # 2. Run Processor
     print("Starting Processor...")
     executor = processor.FuturesExecutor(workers=4)
     runner = processor.Runner(
@@ -206,39 +166,27 @@ if __name__ == '__main__':
         processor_instance=CosmicProcessor(),
     )
 
-    # 3. Save Plots (Post-processing)
+    # 3. Save Plots
     OUTPUT_DIR = "cosmic_muon_plots"
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    PREFIX_DISMUON = "cosmics_dismuon_"
+    PREFIX = "cosmics_dismuon_"
 
-    # Plot Active Histograms
+    # --- Plot Opposite Charge ---
     if "dt_vs_cosA_opp_charge" in out:
-        save_2d_plot(
-            out["dt_vs_cosA_opp_charge"], 
-            "DisMuon_DeltaT_vs_CosAlpha_opp_charge_req", 
-            "Cosmic", 
-            PREFIX_DISMUON, 
-            OUTPUT_DIR
-        )
-
+        save_2d_plot(out["dt_vs_cosA_opp_charge"], "DisMuon_DeltaT_vs_CosAlpha_OppositeCharge", "Cosmic", PREFIX, OUTPUT_DIR)
+        
     if "pt_lead_vs_sublead_opp_charge" in out:
-        save_2d_plot(
-            out["pt_lead_vs_sublead_opp_charge"], 
-            "DisMuon_Lead_vs_Sublead_pT_opp_charge_req", 
-            "Cosmic", 
-            PREFIX_DISMUON, 
-            OUTPUT_DIR
-        )
+        save_2d_plot(out["pt_lead_vs_sublead_opp_charge"], "DisMuon_Lead_vs_Sublead_pT_OppositeCharge", "Cosmic", PREFIX, OUTPUT_DIR)
 
-    # Plot Commented Histograms (if they were filled)
-    # The 'if' check prevents errors if you leave the filling logic commented out
+    # --- Plot Same Charge ---
+    if "dt_vs_cosA_same_charge" in out:
+        save_2d_plot(out["dt_vs_cosA_same_charge"], "DisMuon_DeltaT_vs_CosAlpha_SameCharge", "Cosmic", PREFIX, OUTPUT_DIR)
+        
+    if "pt_lead_vs_sublead_same_charge" in out:
+        save_2d_plot(out["pt_lead_vs_sublead_same_charge"], "DisMuon_Lead_vs_Sublead_pT_SameCharge", "Cosmic", PREFIX, OUTPUT_DIR)
+
+    # --- Plot Veto (If used) ---
     if out["dt_vs_cosA_veto"].sum() > 0:
-         save_2d_plot(
-            out["dt_vs_cosA_veto"], 
-            "DisMuon_DeltaT_vs_CosAlpha_VetoApplied", 
-            "Cosmic", 
-            PREFIX_DISMUON, 
-            OUTPUT_DIR
-        )
+         save_2d_plot(out["dt_vs_cosA_veto"], "DisMuon_DeltaT_vs_CosAlpha_VetoApplied", "Cosmic", PREFIX, OUTPUT_DIR)
 
     print("Done!")
