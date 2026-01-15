@@ -68,6 +68,10 @@ class CosmicProcessor(processor.ProcessorABC):
 
         # Define histograms
         self.output = {
+            # Event Counters (Initialized to 0)
+            "n_same_charge": 0,
+            "n_opp_charge": 0,
+
             # Standard Plots
             "dt_vs_cosA_opp_charge": Hist(
                 axis.Regular(50, -1.05, 1.05, name="cosA", label=r"$\cos(\alpha)$"),
@@ -95,8 +99,6 @@ class CosmicProcessor(processor.ProcessorABC):
                 "mass": events.DisMuon.mass,
                 "charge": events.DisMuon.charge,
                 "timeAtIpInOut": events.DisMuon.timeAtIpInOut,
-                # Assuming these branches exist in your NanoAOD (standard names)
-                # If your custom NanoAOD names them differently, update here.
                 "isGlobal": events.DisMuon.isGlobal, 
                 "isStandalone": events.DisMuon.isStandalone,
             },
@@ -125,20 +127,26 @@ class CosmicProcessor(processor.ProcessorABC):
         denominator = lead.p * sublead.p
         cosA = ak.where(denominator != 0, dot_product / denominator, -1000.0)
 
-        # 6. Define Masks
+        # 6. Define Masks (Charge Only)
         mask_opp = (lead.charge * sublead.charge) < 0
         mask_same = (lead.charge * sublead.charge) > 0
+
+        # 7. Count Events (Total Global Count)
+        # We accumulate these counts BEFORE looking at cosAlpha
+        self.output["n_same_charge"] += ak.sum(mask_same)
+        self.output["n_opp_charge"] += ak.sum(mask_opp)
         
-        # The Duplicate Condition: cosAlpha > 0.99
+        # 8. Define Duplicate Condition (cosAlpha > 0.99)
+        # This is ONLY used for filling the duplicate study histograms
         mask_dups = cosA > 0.99
 
-        # 7. Fill Standard Histograms
+        # 9. Fill Standard Histograms
         self.output["dt_vs_cosA_opp_charge"].fill(cosA=cosA[mask_opp], dt=delta_t[mask_opp])
         self.output["dt_vs_cosA_same_charge"].fill(cosA=cosA[mask_same], dt=delta_t[mask_same])
 
-        # 8. Fill Duplicate Study Histograms
-        # Helper function to fill the group of 5 histograms
+        # 10. Fill Duplicate Study Histograms
         def fill_dup_group(label, mask):
+            # Combines the charge mask AND the duplicate mask
             final_mask = mask & mask_dups
             self.output[f"pt_{label}"].fill(lead=lead.pt[final_mask], sublead=sublead.pt[final_mask])
             self.output[f"eta_{label}"].fill(lead=lead.eta[final_mask], sublead=sublead.eta[final_mask])
@@ -178,13 +186,24 @@ if __name__ == '__main__':
         processor_instance=CosmicProcessor(),
     )
 
-    # 3. Save Plots
+    # 3. Print Results
+    print("\n" + "="*40)
+    print("EVENT COUNT RESULTS (Global - No cosA cut)")
+    print("="*40)
+    print(f"Same Charge Events:     {out['n_same_charge']}")
+    print(f"Opposite Charge Events: {out['n_opp_charge']}")
+    print("="*40 + "\n")
+
+    # 4. Save Plots (Commented Out)
+    '''
     OUTPUT_DIR = "cosmic_muon_plots"
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     PREFIX = "cosmics_dismuon_"
 
     # Plot everything in the output dictionary
     for key, hist_obj in out.items():
+        if isinstance(hist_obj, int): continue # Skip the counters
         save_2d_plot(hist_obj, key, "Cosmic", PREFIX, OUTPUT_DIR)
+    '''
 
     print("Done!")
