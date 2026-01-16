@@ -22,10 +22,10 @@ max_eta = 2.4
 maxLxy = 100
 min_pT = 20
 min_jet_pt = 20
-min_reco_pf_pt = 10
+min_reco_pf_pt = 0
 
 # ----------------------------------------------------------------------
-# Helper Functions (Exact Copy from Post-Doc Code Logic)
+# Helper Functions
 # ----------------------------------------------------------------------
 def get_gen_pions_from_taus(event_):
     pions_from_taus_ = event_.GenPart[abs(event_.GenPart.pdgId) == 211]
@@ -48,12 +48,10 @@ def select_jets(event_):
        (jets_.neHEF < 0.99) &
        (jets_.neEmEF < 0.9) &
        (jets_.chMultiplicity + jets_.neMultiplicity > 1) &
-       (jets_.chHEF > 0.01) &
        (jets_.chMultiplicity > 0) &
-       (jets_.muEF < 0.8) &
+       (jets_.muEF < 0.5) &
        (jets_.chEmEF < 0.8)
     ]
-    jets_ = jets_[(jets_.muEF < 0.5)]
     return jets_
 
 def get_leading_jet(jets_):
@@ -100,7 +98,6 @@ class StauEfficiencyProcessor(processor.ProcessorABC):
         gen_vis_taus = gen_vis_taus[Lxy < maxLxy]
 
         gen_muons = get_gen_muons_from_taus(events)
-        gen_ele = events.GenPart[(abs(events.GenPart.pdgId) == 11) & (events.GenPart.hasFlags("isLastCopy"))]
 
         # Mask: 1 Tau
         # We calculate nGen
@@ -113,9 +110,7 @@ class StauEfficiencyProcessor(processor.ProcessorABC):
         nPass_ECAL = 0
 
         if nGen > 0:
-            # --- 2. Iterative Filtering (Post-Doc Style) ---
-            
-            # Filter A: Must have Gen Pions
+            # Must have Gen Pions
             pions_from_taus = get_gen_pions_from_taus(events_filtered)
             counts_pions = ak.num(pions_from_taus, axis=1)
             events_filtered = events_filtered[counts_pions > 0]
@@ -124,7 +119,7 @@ class StauEfficiencyProcessor(processor.ProcessorABC):
                 # Recalculate objects on filtered events
                 pions_from_taus = get_gen_pions_from_taus(events_filtered)
                 
-                # Filter B: Must have Leading Jet
+                # Must have Leading Jet
                 jets = select_jets(events_filtered)
                 leading_jet = get_leading_jet(jets) # [Events, 1]
                 
@@ -133,11 +128,8 @@ class StauEfficiencyProcessor(processor.ProcessorABC):
                 
                 # We use Pad+Flatten to safely check "Is there a jet?"
                 leading_jet_flat = ak.flatten(leading_jet, axis=1) 
-                # This works because get_leading_jet returns at most 1 jet. 
-                # If 0 jets, flatten removes the event from validity checking below, 
-                # but we need to keep event alignment. 
                 
-                # Better approach: Use counts
+                # Use counts
                 has_leading_jet = ak.num(leading_jet) > 0
                 
                 # Get PF candidates from the leading jet
@@ -150,8 +142,6 @@ class StauEfficiencyProcessor(processor.ProcessorABC):
                 events_reco = events_filtered[reco_pass_mask]
                 
                 if len(events_reco) > 0:
-                    # --- 3. Matching on Selected Events ---
-                    
                     # Re-fetch objects for the subset of passing events
                     jets_final = select_jets(events_reco)
                     leading_jet_final = get_leading_jet(jets_final)
@@ -162,7 +152,7 @@ class StauEfficiencyProcessor(processor.ProcessorABC):
                         (abs(events_reco.GenVisTau.parent.distinctParent.pdgId) == 1000015) &
                         (events_reco.GenVisTau.pt > min_pT) &
                         (abs(events_reco.GenVisTau.eta) < max_eta)
-                    ] # Simplified fetch, we know they exist from step 1
+                    ]
                     
                     pions_final = get_gen_pions_from_taus(events_reco)
                     
@@ -176,7 +166,7 @@ class StauEfficiencyProcessor(processor.ProcessorABC):
                     sorted_gen_pions = pions_final[ak.argsort(pions_final.pt, ascending=False)]
                     leading_gen_pion = sorted_gen_pions[:, 0:1] # [Events, 1(Pion)]
 
-                    # --- Method 1: Standard Nearest (Leading Jet <-> Gen Tau) ---
+                    # Standard Nearest (Leading Jet <-> Gen Tau)
                     # We use the leading jet (flattened to get object) and gen tau (flattened)
                     jet_obj = ak.flatten(leading_jet_final, axis=1)
                     tau_obj = ak.firsts(gen_vis_taus_final)
@@ -184,7 +174,7 @@ class StauEfficiencyProcessor(processor.ProcessorABC):
                     dr_std = jet_obj.delta_r(tau_obj)
                     nPass_Standard = ak.sum(dr_std < 0.4)
 
-                    # --- Method 2: ECAL Matching (Snippet) ---
+                    # --- Method 2: ECAL Matching ---
                     # Flatten Jet dim to get [Events, PFs]
                     flat_leading_pf = ak.flatten(leading_reco_pf, axis=1)
                     
@@ -351,6 +341,6 @@ if __name__ == "__main__":
         print(f"Saved {output_pdf}")
 
     print("Generating Plots...")
-    make_grid_plot("efficiency_strict_standard.json", "grid_plot_strict_standard.pdf", "Eff: Standard + Charged Pion")
-    make_grid_plot("efficiency_strict_ecal.json", "grid_plot_strict_ecal.pdf", "Eff: ECAL + Charged Pion")
+    make_grid_plot("efficiency_strict_standard.json", "grid_plot_strict_standard_no_pt_cut.pdf", "Eff: Standard + Charged Pion")
+    make_grid_plot("efficiency_strict_ecal.json", "grid_plot_strict_ecal_no_pt_cut.pdf", "Eff: ECAL + Charged Pion")
     print("Done!")
