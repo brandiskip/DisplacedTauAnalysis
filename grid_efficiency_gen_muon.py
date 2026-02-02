@@ -40,6 +40,17 @@ def get_gen_muons_from_taus(event_):
     ]
     return muons_from_tau_
 
+def calc_and_add_dxy_gen_pion(pions_from_taus_, events_):
+    counts_pions_ = ak.num(pions_from_taus_, axis=1)
+    pv_y_ = np.asarray(events_.PVBS.y)
+    pv_x_ = np.asarray(events_.PVBS.x)
+    
+    pv_y_expanded_pions_ = ak.unflatten(np.repeat(pv_y_, np.asarray(counts_pions_)), counts_pions_)
+    pv_x_expanded_pions_ = ak.unflatten(np.repeat(pv_x_, np.asarray(counts_pions_)), counts_pions_)
+    
+    pions_from_taus_["dxy"] = (pions_from_taus_.vy - pv_y_expanded_pions_) * np.cos(pions_from_taus_.phi) - \
+                              (pions_from_taus_.vx - pv_x_expanded_pions_) * np.sin(pions_from_taus_.phi)
+
 def select_jets(event_):
     jets_ = event_.Jet[(abs(event_.Jet.eta) < max_eta) & (event_.Jet.pt > min_jet_pt)]
     jets_ = jets_[
@@ -74,19 +85,24 @@ def delta_r_ecal(reco_obj, gen_obj):
 # ----------------------------------------------------------------------
 class StauEfficiencyProcessor(processor.ProcessorABC):
     def __init__(self):
-        # Define Axis
-        self.dxy_axis = axis.Variable(np.arange(0, 60, 5), name="dxy", label=r"$d_{xy}$ [cm]")
-    
-        # H1: Standard Jet Match (Denom = All)
+        # Variable Binning
+        dxy_bins_low = np.arange(0, 8, 1)
+        dxy_bins_med = np.arange(8, 20, 4)
+        dxy_bins_high = np.arange(20, 110, 10)
+        dxy_bins_eff = np.concatenate([dxy_bins_low, dxy_bins_med, dxy_bins_high])
+        
+        self.dxy_axis = axis.Variable(dxy_bins_eff, name="dxy", label=r"$d_{xy}$ [cm]")
+       
         self.h_den_all = Hist(self.dxy_axis)
         self.h_num_jet_match_all = Hist(self.dxy_axis)
-        
-        # H2: Jet Match w/ Pion (Denom = Taus w/ Pion)
         self.h_den_pion = Hist(self.dxy_axis)
         self.h_num_jet_match_pion = Hist(self.dxy_axis)
-        
-        # H3: Pion Match (Denom = Taus w/ Pion)
         self.h_num_pion_match = Hist(self.dxy_axis)
+        self.h_num_pion_match_ecal = Hist(self.dxy_axis)
+
+        self.min_reco_pf_pt = min_reco_pf_pt
+        self.min_gen_tau_pt = min_pT
+        self.decayM = 0
 
     @property
     def accumulator(self):
@@ -96,140 +112,134 @@ class StauEfficiencyProcessor(processor.ProcessorABC):
             "h_den_pion": self.h_den_pion,
             "h_num_jet_match_pion": self.h_num_jet_match_pion,
             "h_num_pion_match": self.h_num_pion_match,
+            "h_num_pion_match_ecal": self.h_num_pion_match_ecal,
         }
 
     def process(self, events):
         dataset = events.metadata['dataset']
         
-        # Gen Selection (Denominator ALL Taus)
+        # Gen Vis Tau Selection (DM0)
         gen_vis_taus = events.GenVisTau[
             (abs(events.GenVisTau.parent.pdgId) == 15) &
             (abs(events.GenVisTau.parent.distinctParent.pdgId) == 1000015) &
             (events.GenVisTau.parent.distinctParent.hasFlags("isLastCopy")) &
             (events.GenVisTau.parent.hasFlags("fromHardProcess")) &
-            (events.GenVisTau.pt > min_pT) &
+            (events.GenVisTau.status == self.decayM) &
+            (events.GenVisTau.pt > self.min_gen_tau_pt) &
             (abs(events.GenVisTau.eta) < max_eta)
         ]
-        
-        # Lxy cut
-        tau_vx = gen_vis_taus.parent.vx - gen_vis_taus.parent.parent.vx
-        tau_vy = gen_vis_taus.parent.vy - gen_vis_taus.parent.parent.vy
+
+        # Lxy Cut
+        tau_vx = gen_vis_taus.parent.distinctParent.vx - ak.firsts(gen_vis_taus.parent.distinctChildren.vx, axis =2)
+        tau_vy = gen_vis_taus.parent.distinctParent.vy - ak.firsts(gen_vis_taus.parent.distinctChildren.vy, axis =2)
         Lxy = np.sqrt(tau_vx**2 + tau_vy**2)
-        gen_vis_taus = gen_vis_taus[Lxy < maxLxy]
+        gen_vis_taus = ak.with_field(gen_vis_taus, Lxy, where="lxy")    
+        gen_vis_taus = gen_vis_taus[abs(gen_vis_taus.lxy) < maxLxy]
 
-        gen_muons = get_gen_muons_from_taus(events)
-
-        # Mask: Exactly 1 valid GenTau and 1 GenMuon
-        mask_all = (ak.num(gen_vis_taus) == 1) & (ak.num(gen_muons) == 1)
-        events_all = events[mask_all]
-
-        # Calculate dxy for ALL passing events
-        tau_all = ak.firsts(events_all.GenVisTau[
-             (abs(events_all.GenVisTau.parent.pdgId) == 15) &
-             (events_all.GenVisTau.pt > min_pT)
-        ])
+        # Muon Selection & Event Mask
+        muons_from_taus = get_gen_muons_from_taus(events)
+        mask = (ak.num(gen_vis_taus) == 1) & (ak.num(muons_from_taus) == 1)
         
-        tau_parent = tau_all.parent
-        dxy_all = abs(
-            (tau_parent.vy - events_all.GenVtx.y) * np.cos(tau_parent.phi) - 
-            (tau_parent.vx - events_all.GenVtx.x) * np.sin(tau_parent.phi)
-        )
-
-        # FILL DENOMINATOR 1 (All Taus)
-        self.h_den_all.fill(dxy_all)
-
-        pions_from_taus = get_gen_pions_from_taus(events_all)
-        has_pion = ak.num(pions_from_taus, axis=1) > 0
+        filter_events = events[mask]
+        filter_taus = gen_vis_taus[mask]
         
-        events_pion = events_all[has_pion]
-        dxy_pion = dxy_all[has_pion]
-
-        # FILL DENOMINATOR 2 & 3 (Taus w/ Pions)
-        self.h_den_pion.fill(dxy_pion)
-
-        # Process "All Events" for Plot 1 (Standard Jet Match)
-        jets_all = select_jets(events_all)
-        leading_jet_all = get_leading_jet(jets_all)
-        has_leading_jet_all = ak.num(leading_jet_all) > 0
+        # Gen Pion Selection
+        pions_from_taus = get_gen_pions_from_taus(filter_events)
+        counts_pions = ak.num(pions_from_taus, axis=1)
+        pion_mask = (counts_pions > 0)
         
-        tau_obj_all = tau_all 
+        # Apply pion mask to BOTH (Critical for alignment accuracy)
+        filter_events = filter_events[pion_mask]
+        filter_taus = filter_taus[pion_mask]
         
-        match_mask_all = np.zeros(len(events_all), dtype=bool)
+        if len(filter_events) == 0:
+            return { dataset: self.accumulator }
+
+        # RECO PRE-SELECTION (Must have Charged PF in Leading Jet)
+        jets = select_jets(filter_events)
+        leading_jet = get_leading_jet(jets)
+
+        jets_one = ak.pad_none(jets, 1, axis=1)
+        leading_one = jets_one[:, 0]
+        empty_jet_lists = ak.Array([[[]]] * len(leading_one))
         
-        if len(events_all) > 0:
+        charged_reco_pf = get_charged_pf(leading_jet, self.min_reco_pf_pt)
+        pf_per_jet = ak.singletons(charged_reco_pf)
+
+        reco_pf = ak.where(ak.is_none(leading_one), empty_jet_lists, pf_per_jet)
+
+        pf_mask = (reco_pf.charge != 0) & (reco_pf.pt > self.min_reco_pf_pt)
+        counts_charged_pf = ak.sum(pf_mask, axis=2)
+        has_charged_in_leading = (ak.sum(counts_charged_pf, axis=1) > 0)
+        has_charged_in_leading_event = ak.fill_none(ak.firsts(has_charged_in_leading, axis=1), False)
+
+        # Require Reco Pion (and sync taus)
+        pf_charged_events = filter_events[has_charged_in_leading_event]
+        pf_charged_taus = filter_taus[has_charged_in_leading_event]
         
-            jets_jagged_sub = leading_jet_all[has_leading_jet_all]
-            taus_sub = tau_obj_all[has_leading_jet_all]
+        if len(pf_charged_events) == 0:
+            return { dataset: self.accumulator }
 
-            jets_existing = ak.flatten(jets_jagged_sub, axis=1)
-            
-            dr_std = jets_existing.delta_r(taus_sub)
-            matched_indices = (dr_std < 0.4)
-            
-            temp_mask = np.zeros(np.sum(has_leading_jet_all), dtype=bool)
-            temp_mask[matched_indices] = True
-            match_mask_all[has_leading_jet_all] = temp_mask
+        # CALCULATE DXY (Denominator)
+        pions_denom = get_gen_pions_from_taus(pf_charged_events)
+        calc_and_add_dxy_gen_pion(pions_denom, pf_charged_events)
+        
+        sorted_pions_denom = pions_denom[ak.argsort(pions_denom.pt, ascending=False)]
+        leading_pion_denom = ak.firsts(sorted_pions_denom)
+        
+        dxy_val = abs(leading_pion_denom.dxy)
 
-        # Fill numerator Jet matched / All
-        self.h_num_jet_match_all.fill(dxy_all[match_mask_all])
+        # FILL DENOMINATORS
+        self.h_den_all.fill(dxy_val)
+        self.h_den_pion.fill(dxy_val)
 
-        # Process "Pion Events" for Plot 2 & 3
-        if len(events_pion) > 0:
-            jets_pion = select_jets(events_pion)
-            leading_jet_pion = get_leading_jet(jets_pion)
-            reco_pf_pion = get_charged_pf(leading_jet_pion, min_reco_pf_pt)
-            
-            has_leading_jet_pion = ak.num(leading_jet_pion) > 0
-            has_pf_in_jet = ak.any(ak.num(reco_pf_pion, axis=2) > 0, axis=1)
-            
-            # Recalculate Tau Obj 
-            tau_obj_pion = ak.firsts(events_pion.GenVisTau[
-                 (abs(events_pion.GenVisTau.parent.pdgId) == 15) &
-                 (events_pion.GenVisTau.pt > min_pT)
-            ])
-            
-            match_mask_pion_jet = np.zeros(len(events_pion), dtype=bool)
-            
-            if np.any(has_leading_jet_pion):
-                 jets_jagged_sub = leading_jet_pion[has_leading_jet_pion]
-                 taus_sub = tau_obj_pion[has_leading_jet_pion]
-                 
-                 jets_flat = ak.flatten(jets_jagged_sub, axis=1)
-                 
-                 dr_std_pion = jets_flat.delta_r(taus_sub)
-                 temp_mask_pion = (dr_std_pion < 0.4)
-                 match_mask_pion_jet[has_leading_jet_pion] = temp_mask_pion
-            
-            # Fill numerator Jet matched / Taus w/ Pion
-            self.h_num_jet_match_pion.fill(dxy_pion[match_mask_pion_jet])
+        # Gen Objects
+        tau_obj = ak.firsts(pf_charged_taus) # From parallel filtering
+        
+        pions_final = get_gen_pions_from_taus(pf_charged_events)
+        leading_gen_pion = pions_final[ak.argsort(pions_final.pt, ascending=False)][:, 0:1]
 
-            # Process Specific Pion Match
-            pf_candidates_mask = has_leading_jet_pion & has_pf_in_jet
-            
-            match_mask_pion_specific = np.zeros(len(events_pion), dtype=bool)
-            
-            if np.any(pf_candidates_mask):
-                events_reco = events_pion[pf_candidates_mask]
-                
-                pions_final = get_gen_pions_from_taus(events_reco)
-                leading_gen_pion = pions_final[ak.argsort(pions_final.pt, ascending=False)][:, 0:1]
-                
-                jets_reco = select_jets(events_reco)
-                lead_jet_reco = get_leading_jet(jets_reco)
-                reco_pf_final = get_charged_pf(lead_jet_reco, min_reco_pf_pt)
-                leading_reco_pf = reco_pf_final[ak.argsort(reco_pf_final.pt, axis=2, ascending=False)][:, :, 0:1]
-                
-                flat_leading_pf = ak.flatten(leading_reco_pf, axis=1)
-                
-                dr_std_pion_match = flat_leading_pf.delta_r(leading_gen_pion)
-                is_pion_match = ak.any(dr_std_pion_match < 0.4, axis=-1)
-                
-                match_mask_pion_specific[pf_candidates_mask] = is_pion_match
+        # Reco Objects
+        jets_final = select_jets(pf_charged_events)
+        leading_jet_final = get_leading_jet(jets_final)
+        
+        # Object for Jet Matching
+        leading_jet_obj = ak.firsts(leading_jet_final)
 
-            # Fill numerator for Pion Matched / Taus w/ Pion
-            self.h_num_pion_match.fill(dxy_pion[match_mask_pion_specific])
+        # Object for Pion Matching
+        reco_pf_final = get_charged_pf(leading_jet_final, self.min_reco_pf_pt)
+        leading_reco_pf = reco_pf_final[ak.argsort(reco_pf_final.pt, axis=2, ascending=False)][:, :, 0:1]
+        flat_leading_pf = ak.flatten(leading_reco_pf, axis=1)
 
-        #return self.accumulator
+        # ---------------------------------------------------------
+        # NUMERATOR 1: JET MATCH (Standard dR < 0.4)
+        # ---------------------------------------------------------
+        dr_jet_tau = leading_jet_obj.delta_r(tau_obj)
+        is_jet_match = ak.fill_none(dr_jet_tau < 0.4, False)
+        
+        self.h_num_jet_match_all.fill(dxy_val[is_jet_match])
+        self.h_num_jet_match_pion.fill(dxy_val[is_jet_match])
+
+        # ---------------------------------------------------------
+        # NUMERATOR 2: PION MATCH (Standard dR < 0.4)
+        # ---------------------------------------------------------
+        dr_std_pion_match = flat_leading_pf.delta_r(leading_gen_pion)
+        
+        is_pion_match = ak.any(dr_std_pion_match < 0.4, axis=-1)
+        is_pion_match = ak.fill_none(is_pion_match, False)
+
+        self.h_num_pion_match.fill(dxy_val[is_pion_match])
+
+        # ---------------------------------------------------------
+        # NUMERATOR 3: PION MATCH (ECAL Match < 0.4)
+        # ---------------------------------------------------------
+        dr_ecal_val = delta_r_ecal(flat_leading_pf, leading_gen_pion)
+        
+        is_pion_match_ecal = ak.any(dr_ecal_val < 0.4, axis=-1)
+        is_pion_match_ecal = ak.fill_none(is_pion_match_ecal, False)
+        
+        self.h_num_pion_match_ecal.fill(dxy_val[is_pion_match_ecal])
+
         return { dataset: self.accumulator }
 
     def postprocess(self, accumulator):
@@ -317,53 +327,50 @@ if __name__ == "__main__":
 
         # Plotting Function
         def plot_ratio_internal(h_num, h_den, ax, label=None, color='black'):
-            # Extract values
             num_vals = h_num.values()
             den_vals = h_den.values()
             
-            # Calculate Ratio and Errors using hist.intervals
-            # efficiency_type="efficiency" gives Clopper-Pearson intervals
             ratio = np.divide(num_vals, den_vals, out=np.zeros_like(num_vals), where=den_vals!=0)
             yerr = intervals.ratio_uncertainty(num_vals, den_vals, uncertainty_type='efficiency')
             
-            # Get Centers
             centers = h_num.axes[0].centers
-            
-            ax.errorbar(centers, ratio, yerr=yerr, fmt='o', color=color, label=label, capsize=3)
+            edges = h_num.axes[0].edges
+            width = (edges[1:] - edges[:-1]) / 2
+
+            ax.errorbar(centers, ratio, yerr=yerr, xerr=width, fmt='o', color=color, label=label, capsize=3)
             ax.set_ylim(0, 1.1)
             ax.grid(True)
             ax.set_ylabel("Efficiency")
             ax.set_xlabel(h_num.axes[0].label)
 
-        # Generate Plots
         print("Generating Efficiency Plots...")
 
-        # Plot 1: Standard Jet Match
+        # Standard Jet Match
         fig, ax = plt.subplots(figsize=(8, 6))
-        plot_ratio_internal(results['h_num_jet_match_all'], results['h_den_all'], ax, label="Jet Match (All Taus)")
-        ax.set_title("Efficiency: Jet Match (All GenVisTaus)")
+        plot_ratio_internal(results['h_num_jet_match_all'], results['h_den_all'], ax, label="Jet Match (dR < 0.4)")
+        ax.set_title("Eff: Jet Match GenVisTau (Standard) [Has Reco Pion]")
         ax.legend()
-        plt.savefig("eff_jet_match_all.pdf")
+        plt.savefig("eff_jet_match_req_reco_dm0_no_pt_cut_pion.pdf")
         plt.close()
         print("Saved eff_jet_match_all.pdf")
 
-        # Plot 2: Jet Match (Given Pion)
+        # Pion Match (STANDARD dR)
         fig, ax = plt.subplots(figsize=(8, 6))
-        plot_ratio_internal(results['h_num_jet_match_pion'], results['h_den_pion'], ax, label="Jet Match (Taus w/ Pion)")
-        ax.set_title("Efficiency: Jet Match (Taus w/ GenPion)")
+        plot_ratio_internal(results['h_num_pion_match'], results['h_den_pion'], ax, label="Pion Match (Standard dR < 0.4)")
+        ax.set_title("Eff: RecoPion Match GenPion (Standard) [Has Reco Pion]")
         ax.legend()
-        plt.savefig("eff_jet_match_pion.pdf")
-        plt.close()
-        print("Saved eff_jet_match_pion.pdf")
-
-        # Plot 3: Pion Match (Given Pion)
-        fig, ax = plt.subplots(figsize=(8, 6))
-        plot_ratio_internal(results['h_num_pion_match'], results['h_den_pion'], ax, label="Pion Match (Taus w/ Pion)")
-        ax.set_title("Efficiency: Pion Match (RecPF -> GenPion)")
-        ax.legend()
-        plt.savefig("eff_pion_match.pdf")
+        plt.savefig("eff_pion_match_req_reco_dm0_no_pt_cut_pion.pdf")
         plt.close()
         print("Saved eff_pion_match.pdf")
+
+        # Pion Match (ECAL dR)
+        fig, ax = plt.subplots(figsize=(8, 6))
+        plot_ratio_internal(results['h_num_pion_match_ecal'], results['h_den_pion'], ax, label="Pion Match (ECAL dR < 0.4)")
+        ax.set_title("Eff: RecoPion Match GenPion (ECAL) [Has Reco Pion]")
+        ax.legend()
+        plt.savefig("eff_pion_match_ecal_req_reco_dm0_no_pt_cut_pion.pdf")
+        plt.close()
+        print("Saved eff_pion_match_ecal.pdf")
 
     '''
     print("Starting Parallel Analysis (Iterative Filtering)...")
