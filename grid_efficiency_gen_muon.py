@@ -20,7 +20,7 @@ max_eta = 2.4
 maxLxy = 100
 min_pT = 20
 min_jet_pt = 20
-min_reco_pf_pt = 0
+min_reco_pf_pt = 2
 
 # ----------------------------------------------------------------------
 # Helper Functions
@@ -66,6 +66,7 @@ def select_jets(event_):
 def get_leading_jet(jets_):
     sorted_jets_ = jets_[ak.argsort(jets_.disTauTag_score1, ascending=False)]
     leading_jet_ = sorted_jets_[:, :1]
+    #leading_jet_ = leading_jet_[leading_jet_.disTauTag_score1 > 0.9]
     return leading_jet_
 
 def get_charged_pf(leading_jet_, min_reco_pf_pt_):
@@ -86,19 +87,27 @@ def delta_r_ecal(reco_obj, gen_obj):
 class StauEfficiencyProcessor(processor.ProcessorABC):
     def __init__(self):
         # Variable Binning
-        dxy_bins_low = np.arange(0, 8, 1)
-        dxy_bins_med = np.arange(8, 20, 4)
-        dxy_bins_high = np.arange(20, 110, 10)
-        dxy_bins_eff = np.concatenate([dxy_bins_low, dxy_bins_med, dxy_bins_high])
-        
+        dxy_bins_low = np.arange(0, 10, 2)
+        dxy_bins_med = np.arange(10, 20, 5)
+        dxy_bins_high = np.arange(20, 50, 10)
+        dxy_bins_highest = np.arange(50, 110, 20)
+        dxy_bins_eff = np.concatenate([dxy_bins_low, dxy_bins_med, dxy_bins_high, dxy_bins_highest])
         self.dxy_axis = axis.Variable(dxy_bins_eff, name="dxy", label=r"$d_{xy}$ [cm]")
-       
+
         self.h_den_all = Hist(self.dxy_axis)
         self.h_num_jet_match_all = Hist(self.dxy_axis)
         self.h_den_pion = Hist(self.dxy_axis)
         self.h_num_jet_match_pion = Hist(self.dxy_axis)
         self.h_num_pion_match = Hist(self.dxy_axis)
         self.h_num_pion_match_ecal = Hist(self.dxy_axis)
+
+        pt_bins = np.array([20, 30, 40, 50, 60, 80, 100, 150, 200, 300, 400, 500])
+        self.pt_axis = axis.Variable(pt_bins, name="pt", label=r"Gen Pion $p_{T}$ [GeV]")
+
+        self.h_den_pt = Hist(self.pt_axis)
+        self.h_num_jet_match_pt = Hist(self.pt_axis)
+        self.h_num_pion_match_pt = Hist(self.pt_axis)
+        self.h_num_pion_match_ecal_pt = Hist(self.pt_axis)
 
         self.min_reco_pf_pt = min_reco_pf_pt
         self.min_gen_tau_pt = min_pT
@@ -113,6 +122,11 @@ class StauEfficiencyProcessor(processor.ProcessorABC):
             "h_num_jet_match_pion": self.h_num_jet_match_pion,
             "h_num_pion_match": self.h_num_pion_match,
             "h_num_pion_match_ecal": self.h_num_pion_match_ecal,
+
+            "h_den_pt": self.h_den_pt,
+            "h_num_jet_match_pt": self.h_num_jet_match_pt,
+            "h_num_pion_match_pt": self.h_num_pion_match_pt,
+            "h_num_pion_match_ecal_pt": self.h_num_pion_match_ecal_pt,
         }
 
     def process(self, events):
@@ -148,7 +162,7 @@ class StauEfficiencyProcessor(processor.ProcessorABC):
         counts_pions = ak.num(pions_from_taus, axis=1)
         pion_mask = (counts_pions > 0)
         
-        # Apply pion mask to BOTH (Critical for alignment accuracy)
+        # Apply pion mask to BOTH 
         filter_events = filter_events[pion_mask]
         filter_taus = filter_taus[pion_mask]
         
@@ -188,10 +202,12 @@ class StauEfficiencyProcessor(processor.ProcessorABC):
         leading_pion_denom = ak.firsts(sorted_pions_denom)
         
         dxy_val = abs(leading_pion_denom.dxy)
+        pt_val  = leading_pion_denom.pt
 
         # FILL DENOMINATORS
         self.h_den_all.fill(dxy_val)
         self.h_den_pion.fill(dxy_val)
+        self.h_den_pt.fill(pt_val)
 
         # Gen Objects
         tau_obj = ak.firsts(pf_charged_taus) # From parallel filtering
@@ -219,6 +235,7 @@ class StauEfficiencyProcessor(processor.ProcessorABC):
         
         self.h_num_jet_match_all.fill(dxy_val[is_jet_match])
         self.h_num_jet_match_pion.fill(dxy_val[is_jet_match])
+        self.h_num_jet_match_pt.fill(pt_val[is_jet_match])
 
         # ---------------------------------------------------------
         # NUMERATOR 2: PION MATCH (Standard dR < 0.4)
@@ -229,6 +246,7 @@ class StauEfficiencyProcessor(processor.ProcessorABC):
         is_pion_match = ak.fill_none(is_pion_match, False)
 
         self.h_num_pion_match.fill(dxy_val[is_pion_match])
+        self.h_num_pion_match_pt.fill(pt_val[is_pion_match])
 
         # ---------------------------------------------------------
         # NUMERATOR 3: PION MATCH (ECAL Match < 0.4)
@@ -239,6 +257,7 @@ class StauEfficiencyProcessor(processor.ProcessorABC):
         is_pion_match_ecal = ak.fill_none(is_pion_match_ecal, False)
         
         self.h_num_pion_match_ecal.fill(dxy_val[is_pion_match_ecal])
+        self.h_num_pion_match_ecal_pt.fill(pt_val[is_pion_match_ecal])
 
         return { dataset: self.accumulator }
 
@@ -345,12 +364,156 @@ if __name__ == "__main__":
 
         print("Generating Efficiency Plots...")
 
+        # =========================================================
+        # 1. OVERLAY PLOT vs DXY (Displacement)
+        # =========================================================
+        fig, ax = plt.subplots(figsize=(8, 6))
+        
+        # Jet Match -> GREEN
+        plot_ratio_internal(
+            results['h_num_jet_match_all'], 
+            results['h_den_all'], 
+            ax, 
+            label=r"Jet $\rightarrow$ GenVisTau (Std)",
+            color='green'
+        )
+
+        # Pion Match (Standard) -> BLUE
+        plot_ratio_internal(
+            results['h_num_pion_match'], 
+            results['h_den_pion'], 
+            ax, 
+            label=r"RecoPi $\rightarrow$ GenPi (Std)",
+            color='blue'
+        )
+
+        # Pion Match (ECAL) -> RED
+        plot_ratio_internal(
+            results['h_num_pion_match_ecal'], 
+            results['h_den_pion'], 
+            ax, 
+            label=r"RecoPi $\rightarrow$ GenPi (ECAL)",
+            color='red'
+        )
+
+        ax.set_title("Gen Pion Efficiency vs Displacement") 
+        ax.set_xlabel(r"Gen Pion $d_{xy}$ [cm]")  # <--- Updated X-Label
+        ax.legend()
+        
+        plt.savefig("eff_overlay_3way_dxy.pdf")
+        plt.close()
+        print("Saved eff_overlay_3way_dxy.pdf")
+
+        # =========================================================
+        # 2. OVERLAY PLOT vs PT (Momentum)
+        # =========================================================
+        fig, ax = plt.subplots(figsize=(8, 6))
+        
+        # Jet Match -> GREEN
+        plot_ratio_internal(
+            results['h_num_jet_match_pt'], 
+            results['h_den_pt'], 
+            ax, 
+            label=r"Jet $\rightarrow$ GenVisTau (Std)",
+            color='green'
+        )
+
+        # Pion Match (Standard) -> BLUE
+        plot_ratio_internal(
+            results['h_num_pion_match_pt'], 
+            results['h_den_pt'], 
+            ax, 
+            label=r"RecoPi $\rightarrow$ GenPi (Std)",
+            color='blue'
+        )
+
+        # Pion Match (ECAL) -> RED
+        plot_ratio_internal(
+            results['h_num_pion_match_ecal_pt'], 
+            results['h_den_pt'], 
+            ax, 
+            label=r"RecoPi $\rightarrow$ GenPi (ECAL)",
+            color='red'
+        )
+
+        ax.set_title("Gen Pion Efficiency vs Momentum") 
+        ax.set_xlabel(r"Gen Pion $p_{T}$ [GeV]") # <--- Updated X-Label
+        ax.legend()
+        
+        plt.savefig("eff_overlay_3way_pt.pdf")
+        plt.close()
+        print("Saved eff_overlay_3way_pt.pdf")
+        '''
+        # =========================================================
+        # 1. PLOT: Standard vs ECAL Match (Superimposed) vs dxy
+        # =========================================================
+        fig, ax = plt.subplots(figsize=(8, 6))
+        
+        # Plot Standard Match -> BLUE
+        plot_ratio_internal(
+            results['h_num_pion_match'], 
+            results['h_den_pion'], 
+            ax, 
+            label="Standard Match (dR < 0.4)",
+            color='blue'   # <--- EXPLICIT COLOR
+        )
+
+        # Plot ECAL Match -> RED
+        plot_ratio_internal(
+            results['h_num_pion_match_ecal'], 
+            results['h_den_pion'], 
+            ax, 
+            label="ECAL Match (dR < 0.4)",
+            color='red'    # <--- EXPLICIT COLOR
+        )
+
+        ax.set_title("Eff: RecoPion Match GenPion [Has Reco Pion]")
+        ax.set_xlabel(r"$d_{xy}$ [cm]")
+        ax.legend()
+        
+        plt.savefig("eff_comparison_pion_match_dxy.pdf")
+        plt.close()
+        print("Saved eff_comparison_pion_match_dxy.pdf")
+
+        # =========================================================
+        # 2. PLOT: Standard vs ECAL Match (Superimposed) vs pT
+        # =========================================================
+        fig, ax = plt.subplots(figsize=(8, 6))
+        
+        # Plot Standard Match -> BLUE
+        plot_ratio_internal(
+            results['h_num_pion_match_pt'], 
+            results['h_den_pt'], 
+            ax, 
+            label="Standard Match (dR < 0.4)",
+            color='blue'   # <--- EXPLICIT COLOR
+        )
+
+        # Plot ECAL Match -> RED
+        plot_ratio_internal(
+            results['h_num_pion_match_ecal_pt'], 
+            results['h_den_pt'], 
+            ax, 
+            label="ECAL Match (dR < 0.4)",
+            color='red'    # <--- EXPLICIT COLOR
+        )
+
+        ax.set_title("Eff vs pT: RecoPion Match GenPion [Has Reco Pion]")
+        ax.set_xlabel(r"Gen Pion $p_{T}$ [GeV]")
+        ax.legend()
+        
+        plt.savefig("eff_comparison_pion_match_pt.pdf")
+        plt.close()
+        print("Saved eff_comparison_pion_match_pt.pdf")
+        '''
+
+        '''
         # Standard Jet Match
         fig, ax = plt.subplots(figsize=(8, 6))
         plot_ratio_internal(results['h_num_jet_match_all'], results['h_den_all'], ax, label="Jet Match (dR < 0.4)")
         ax.set_title("Eff: Jet Match GenVisTau (Standard) [Has Reco Pion]")
         ax.legend()
-        plt.savefig("eff_jet_match_req_reco_dm0_no_pt_cut_pion.pdf")
+        plt.savefig("eff_jet_match_req_reco_dm0_pt_cut_2_pion.pdf")
         plt.close()
         print("Saved eff_jet_match_all.pdf")
 
@@ -359,7 +522,7 @@ if __name__ == "__main__":
         plot_ratio_internal(results['h_num_pion_match'], results['h_den_pion'], ax, label="Pion Match (Standard dR < 0.4)")
         ax.set_title("Eff: RecoPion Match GenPion (Standard) [Has Reco Pion]")
         ax.legend()
-        plt.savefig("eff_pion_match_req_reco_dm0_no_pt_cut_pion.pdf")
+        plt.savefig("eff_pion_match_req_reco_dm0_pt_cut_2_pion.pdf")
         plt.close()
         print("Saved eff_pion_match.pdf")
 
@@ -368,9 +531,40 @@ if __name__ == "__main__":
         plot_ratio_internal(results['h_num_pion_match_ecal'], results['h_den_pion'], ax, label="Pion Match (ECAL dR < 0.4)")
         ax.set_title("Eff: RecoPion Match GenPion (ECAL) [Has Reco Pion]")
         ax.legend()
-        plt.savefig("eff_pion_match_ecal_req_reco_dm0_no_pt_cut_pion.pdf")
+        plt.savefig("eff_pion_match_ecal_req_reco_dm0_pt_cut_2_pion.pdf")
         plt.close()
         print("Saved eff_pion_match_ecal.pdf")
+
+        # 1. Jet Match vs PT (Standard dR)
+        fig, ax = plt.subplots(figsize=(8, 6))
+        plot_ratio_internal(results['h_num_jet_match_pt'], results['h_den_pt'], ax, label="Jet Match (dR < 0.4)")
+        ax.set_title("Eff vs pT: Jet Match GenVisTau (Standard) [Has Reco Pion]")
+        ax.set_xlabel(r"Gen Pion $p_{T}$ [GeV]")
+        ax.legend()
+        plt.savefig("eff_jet_match_pt_req_reco_dm0_pt_cut_2_pion.pdf")
+        plt.close()
+        print("Saved eff_jet_match_pt.pdf")
+
+        # 2. Pion Match vs PT (Standard dR)
+        fig, ax = plt.subplots(figsize=(8, 6))
+        plot_ratio_internal(results['h_num_pion_match_pt'], results['h_den_pt'], ax, label="Pion Match (Standard dR < 0.4)")
+        ax.set_title("Eff vs pT: RecoPion Match GenPion (Standard) [Has Reco Pion]")
+        ax.set_xlabel(r"Gen Pion $p_{T}$ [GeV]")
+        ax.legend()
+        plt.savefig("eff_pion_match_pt_req_reco_dm0_pt_cut_2_pion.pdf")
+        plt.close()
+        print("Saved eff_pion_match_pt.pdf")
+
+        # 3. Pion Match vs PT (ECAL dR)
+        fig, ax = plt.subplots(figsize=(8, 6))
+        plot_ratio_internal(results['h_num_pion_match_ecal_pt'], results['h_den_pt'], ax, label="Pion Match (ECAL dR < 0.4)")
+        ax.set_title("Eff vs pT: RecoPion Match GenPion (ECAL) [Has Reco Pion]")
+        ax.set_xlabel(r"Gen Pion $p_{T}$ [GeV]")
+        ax.legend()
+        plt.savefig("eff_pion_match_ecal_pt_req_reco_dm0_pt_cut_2_pion.pdf")
+        plt.close()
+        print("Saved eff_pion_match_ecal_pt.pdf")
+        '''
 
     '''
     print("Starting Parallel Analysis (Iterative Filtering)...")
