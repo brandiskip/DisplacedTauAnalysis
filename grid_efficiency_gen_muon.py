@@ -109,6 +109,14 @@ class StauEfficiencyProcessor(processor.ProcessorABC):
         self.h_num_pion_match_pt = Hist(self.pt_axis)
         self.h_num_pion_match_ecal_pt = Hist(self.pt_axis)
 
+        self.dr_axis = axis.Regular(100, 0, 5.0, name="dr", label=r"$\Delta R_{ECAL}$ (Reco, Gen)")
+        self.h_dr_20_30 = Hist(self.dr_axis)
+        self.h_dr_30_40 = Hist(self.dr_axis)
+        self.h_dr_40_50 = Hist(self.dr_axis)
+        self.h_dr_50_70 = Hist(self.dr_axis)
+        self.h_dr_70_90 = Hist(self.dr_axis)
+        self.h_dr_90_110 = Hist(self.dr_axis)
+
         self.min_reco_pf_pt = min_reco_pf_pt
         self.min_gen_tau_pt = min_pT
         self.decayM = 0
@@ -127,12 +135,19 @@ class StauEfficiencyProcessor(processor.ProcessorABC):
             "h_num_jet_match_pt": self.h_num_jet_match_pt,
             "h_num_pion_match_pt": self.h_num_pion_match_pt,
             "h_num_pion_match_ecal_pt": self.h_num_pion_match_ecal_pt,
+
+            "h_dr_20_30": self.h_dr_20_30,
+            "h_dr_30_40": self.h_dr_30_40,
+            "h_dr_40_50": self.h_dr_40_50,
+            "h_dr_50_70": self.h_dr_50_70,
+            "h_dr_70_90": self.h_dr_70_90,
+            "h_dr_90_110": self.h_dr_90_110,
         }
 
     def process(self, events):
         dataset = events.metadata['dataset']
         
-        # Gen Vis Tau Selection (DM0)
+        # Gen Vis Tau Selection
         gen_vis_taus = events.GenVisTau[
             (abs(events.GenVisTau.parent.pdgId) == 15) &
             (abs(events.GenVisTau.parent.distinctParent.pdgId) == 1000015) &
@@ -227,6 +242,8 @@ class StauEfficiencyProcessor(processor.ProcessorABC):
         leading_reco_pf = reco_pf_final[ak.argsort(reco_pf_final.pt, axis=2, ascending=False)][:, :, 0:1]
         flat_leading_pf = ak.flatten(leading_reco_pf, axis=1)
 
+        print(f"Events with leading_reco_pf: {len(flat_leading_pf)}")
+
         # ---------------------------------------------------------
         # NUMERATOR 1: JET MATCH (Standard dR < 0.4)
         # ---------------------------------------------------------
@@ -259,6 +276,21 @@ class StauEfficiencyProcessor(processor.ProcessorABC):
         self.h_num_pion_match_ecal.fill(dxy_val[is_pion_match_ecal])
         self.h_num_pion_match_ecal_pt.fill(pt_val[is_pion_match_ecal])
 
+        def fill_region(low, high, hist):
+            mask = (dxy_val >= low) & (dxy_val < high)
+            dr_in_region = dr_ecal_val[mask]
+            # Flatten to remove jagged structure
+            dr_flat = ak.flatten(dr_in_region, axis=None)
+            if len(dr_flat) > 0:
+                hist.fill(dr_flat)
+
+        fill_region(20, 30, self.h_dr_20_30)
+        fill_region(30, 40, self.h_dr_30_40)
+        fill_region(40, 50, self.h_dr_40_50)
+        fill_region(50, 70, self.h_dr_50_70)
+        fill_region(70, 90, self.h_dr_70_90)
+        fill_region(90, 110, self.h_dr_90_110)
+
         return { dataset: self.accumulator }
 
     def postprocess(self, accumulator):
@@ -279,20 +311,20 @@ if __name__ == "__main__":
         #     }
         # },
         
-        "Stau_300_100mm": {
+        #"Stau_300_100mm": {
+        #    "files": {
+        #        "root://cmseos.fnal.gov//store/group/lpcdisptau/displacedTaus/nanoprod/summary/Run3_Summer22_chs_AK4PFCands_v12/SMS-TStauStau_MStau-300_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/nano_0.root": "Events",
+        #    }
+        #},
+
+        "Stau_300_1000mm": {
             "files": {
                 "root://cmseos.fnal.gov//store/group/lpcdisptau/displacedTaus/nanoprod/summary/Run3_Summer22_chs_AK4PFCands_v12/SMS-TStauStau_MStau-300_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/nano_0.root": "Events",
+                "root://cmseos.fnal.gov//store/group/lpcdisptau/displacedTaus/nanoprod/summary/Run3_Summer22_chs_AK4PFCands_v12/SMS-TStauStau_MStau-300_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/nano_1.root": "Events",
+                "root://cmseos.fnal.gov//store/group/lpcdisptau/displacedTaus/nanoprod/summary/Run3_Summer22_chs_AK4PFCands_v12/SMS-TStauStau_MStau-300_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/nano_2.root": "Events",
+                "root://cmseos.fnal.gov//store/group/lpcdisptau/displacedTaus/nanoprod/summary/Run3_Summer22_chs_AK4PFCands_v12/SMS-TStauStau_MStau-300_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/nano_3.root": "Events",
             }
         },
-
-        # "Stau_300_1000mm": {
-        #     "files": {
-        #         "root://cmseos.fnal.gov//store/group/lpcdisptau/displacedTaus/nanoprod/summary/Run3_Summer22_chs_AK4PFCands_v12/SMS-TStauStau_MStau-300_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/nano_0.root": "Events",
-        #         "root://cmseos.fnal.gov//store/group/lpcdisptau/displacedTaus/nanoprod/summary/Run3_Summer22_chs_AK4PFCands_v12/SMS-TStauStau_MStau-300_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/nano_1.root": "Events",
-        #         "root://cmseos.fnal.gov//store/group/lpcdisptau/displacedTaus/nanoprod/summary/Run3_Summer22_chs_AK4PFCands_v12/SMS-TStauStau_MStau-300_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/nano_2.root": "Events",
-        #         "root://cmseos.fnal.gov//store/group/lpcdisptau/displacedTaus/nanoprod/summary/Run3_Summer22_chs_AK4PFCands_v12/SMS-TStauStau_MStau-300_ctau-1000mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/nano_3.root": "Events",
-        #     }
-        # },
         # "Stau_100_100mm": {
         #     "files": {
         #         "root://cmseos.fnal.gov//store/group/lpcdisptau/displacedTaus/nanoprod/summary/Run3_Summer22_chs_AK4PFCands_v12/SMS-TStauStau_MStau-100_ctau-100mm_mLSP-1_TuneCP5_13p6TeV_madgraphMLM-pythia8/nano_0.root": "Events",
@@ -333,8 +365,8 @@ if __name__ == "__main__":
         processor_instance=StauEfficiencyProcessor(),
     )
 
-    if "Stau_300_100mm" in output:
-        results = output["Stau_300_100mm"]
+    if "Stau_300_1000mm" in output:
+        results = output["Stau_300_1000mm"]
         
         # Save results to pickle
         import pickle
@@ -362,8 +394,50 @@ if __name__ == "__main__":
             ax.set_ylabel("Efficiency")
             ax.set_xlabel(h_num.axes[0].label)
 
-        print("Generating Efficiency Plots...")
+        print("Generating dR ECAL Overlay Plot for High dxy...")
+        
+        fig, ax = plt.subplots(figsize=(9, 7))
+        
+        # List of regions, the histogram keys, and colors
+        regions_config = [
+            ("20-30", "h_dr_20_30", "navy"),
+            ("30-40", "h_dr_30_40", "royalblue"),
+            ("40-50", "h_dr_40_50", "teal"),
+            ("50-70", "h_dr_50_70", "forestgreen"),
+            ("70-90", "h_dr_70_90", "orange"),
+            ("90-110", "h_dr_90_110", "firebrick"),
+        ]
+        
+        for label, h_key, color in regions_config:
+            if h_key not in results:
+                continue
 
+            h_obj = results[h_key]
+            vals = h_obj.values() # Raw counts
+            
+            if np.sum(vals) == 0:
+                continue
+            
+            centers = h_obj.axes[0].centers
+            
+            # Plot raw counts
+            ax.step(centers, vals, where='mid', label=f"$d_{{xy}} \in [{label}]$ cm", color=color, linewidth=2)
+
+        ax.set_title(r"$\Delta R_{ECAL}$ (Reco, Gen) Raw Counts")
+        ax.set_xlabel(r"$\Delta R_{ECAL}$")
+        ax.set_ylabel("Events / Bin")
+        
+        # UPDATED LIMITS
+        ax.set_xlim(0, 5.0) 
+        
+        ax.legend(title="Displacement Region")
+        ax.grid(True, alpha=0.3)
+        
+        plt.savefig("dr_ecal_overlay_high_dxy_300_1000.pdf")
+        plt.close()
+        print("Saved dr_ecal_overlay_high_dxy_300_1000.pdf")
+
+        '''
         # =========================================================
         # 1. OVERLAY PLOT vs DXY (Displacement)
         # =========================================================
@@ -396,11 +470,11 @@ if __name__ == "__main__":
             color='red'
         )
 
-        ax.set_title("Gen Pion Efficiency vs Displacement") 
-        ax.set_xlabel(r"Gen Pion $d_{xy}$ [cm]")  # <--- Updated X-Label
+        ax.set_title("Gen Pion Efficiency vs Displacement 300_1000_pt2") 
+        ax.set_xlabel(r"Gen Pion $d_{xy}$ [cm]")  
         ax.legend()
         
-        plt.savefig("eff_overlay_3way_dxy.pdf")
+        plt.savefig("eff_overlay_3way_dxy_300_1000_pt2.pdf")
         plt.close()
         print("Saved eff_overlay_3way_dxy.pdf")
 
@@ -436,13 +510,15 @@ if __name__ == "__main__":
             color='red'
         )
 
-        ax.set_title("Gen Pion Efficiency vs Momentum") 
-        ax.set_xlabel(r"Gen Pion $p_{T}$ [GeV]") # <--- Updated X-Label
+        ax.set_title("Gen Pion Efficiency vs Momentum 300_1000_pt2") 
+        ax.set_xlabel(r"Gen Pion $p_{T}$ [GeV]") 
         ax.legend()
         
-        plt.savefig("eff_overlay_3way_pt.pdf")
+        plt.savefig("eff_overlay_3way_pt_300_1000_pt2.pdf")
         plt.close()
         print("Saved eff_overlay_3way_pt.pdf")
+        '''
+
         '''
         # =========================================================
         # 1. PLOT: Standard vs ECAL Match (Superimposed) vs dxy
