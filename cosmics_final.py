@@ -165,12 +165,6 @@ class SingleMuonProcessor(processor.ProcessorABC):
             behavior=vector.behavior,
         )
 
-        # Apply Quality Cuts
-        mask_medium = events.DisMuon.mediumId == True
-        mask_iso = events.DisMuon.pfRelIso03_all < 0.18
-        
-        events["DisMuon"] = events.DisMuon[mask_medium & mask_iso]
-
         gen_muons = events.GenPart[
             (abs(events.GenPart.pdgId) == 13) & 
             (events.GenPart.status == 1) #& (abs(events.GenPart.distinctParent.distinctParent.pdgId) == 1000015)
@@ -188,6 +182,12 @@ class SingleMuonProcessor(processor.ProcessorABC):
         if ak.sum(mask_single) > 0:
             single_muons = events.DisMuon[mask_single][:, 0]
             valid_gen_muons = gen_muons[mask_single]
+            
+            mask_medium = (single_muons.mediumId == True)
+            mask_iso = (single_muons.pfRelIso03_all < 0.18)
+            
+            single_muons = single_muons[mask_medium & mask_iso]
+            valid_gen_muons = valid_gen_muons[mask_medium & mask_iso]
 
             # Cosmic Logic
             if dataset.startswith("LooseMu") or dataset == "test_cosmics_calib":
@@ -440,18 +440,18 @@ if __name__ == '__main__':
     FILE_MODIFIER = "Stau_300_100mm_overlay"
 
     overlay_plots = [
-        #"single_muon_dz_overlay",
-        #"single_muon_validDTHits",
-        #"single_muon_validCSCHits",
-        #"single_muon_validHits",
-        #"single_muon_dtStations",
-        #"single_muon_pt",
-        #"single_muon_eta",
-        #"single_muon_phi",
-        #"single_muon_dxy",
-        #"single_muon_dR_mb2",
-        #"single_muon_timeAtIpInOut",
-        #"single_muon_timeAtIpInOutErr",
+        "single_muon_dz_overlay",
+        "single_muon_validDTHits",
+        "single_muon_validCSCHits",
+        "single_muon_validHits",
+        "single_muon_dtStations",
+        "single_muon_pt",
+        "single_muon_eta",
+        "single_muon_phi",
+        "single_muon_dxy",
+        "single_muon_dR_mb2",
+        "single_muon_timeAtIpInOut",
+        "single_muon_timeAtIpInOutErr",
         "two_muons_cos_alpha"
     ]
 
