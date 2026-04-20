@@ -7,13 +7,11 @@ cfg.set({'distributed.scheduler.worker-ttl': None})
 from uproot.exceptions import KeyInFileError
 from dask.distributed import Client, LocalCluster
 
-# parser = argparse.ArgumentParser(description="Preprocess Cosmic samples")
-parser = argparse.ArgumentParser(description="Preprocess Cosmic and Signal samples") # UPDATED
+parser = argparse.ArgumentParser(description="Preprocess Cosmic and Signal samples")
 parser.add_argument(
     "--sample",
     default='Cosmic',
-    # choices=['Cosmic'], # Only option allowed
-    choices=['Cosmic', 'Stau_300_100mm'], # ADDED Signal sample option
+    choices=['Cosmic', 'Stau_100_100mm', 'Stau_300_100mm', 'Stau_500_100mm'], 
     help='Specify the sample you want to process')
 parser.add_argument(
     "--nfiles",
@@ -22,7 +20,7 @@ parser.add_argument(
     help='Specify the number of input files to process (-1 for all)')
 parser.add_argument(
     "--nanov",
-    default='Summer22_CHS_v17_Cosmic', 
+    default='Summer22_CHS_v19_Cosmic', 
     required=False,
     help='Specify the custom nanoaod version to process')
 args = parser.parse_args()
@@ -30,9 +28,12 @@ args = parser.parse_args()
 outdir_p = f'{args.nanov}.'
 outdir_s = f'{args.nanov}/'
 
+# ADDED 100 and 500 to the samples dictionary
 samples = {
     "Cosmic" : f"samples.{outdir_p}fileset_Cosmic",
+    "Stau_100_100mm" : f"samples.{outdir_p}fileset_Stau_100_100mm",
     "Stau_300_100mm" : f"samples.{outdir_p}fileset_Stau_300_100mm",
+    "Stau_500_100mm" : f"samples.{outdir_p}fileset_Stau_500_100mm",
 }
 
 try:
@@ -51,9 +52,12 @@ if nfiles != -1:
 
 print("Will process {} files from: {}".format(nfiles if nfiles != -1 else "ALL", fileset.keys()))
 
+# ADDED 100 and 500 to the parameters dictionary
 pars_per_sample = {
     "Cosmic" : [50_000, 10], 
+    "Stau_100_100mm" : [50_000, 10],
     "Stau_300_100mm" : [50_000, 10], 
+    "Stau_500_100mm" : [50_000, 10],
 }
 
 if __name__ == "__main__":
