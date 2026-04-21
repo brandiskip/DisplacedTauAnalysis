@@ -93,6 +93,7 @@ class SingleMuonProcessor(processor.ProcessorABC):
         self.output = {
             "n_events_initial": 0,
             "n_duplicates_removed": 0,
+            "n_events_3plus_muons_post_cleaning": 0,
             
             "single_muon_pt": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(100, 0, 100, name="val", label=r"Single Muon $p_T$ [GeV]")),
             "single_muon_eta": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(100, -2.5, 2.5, name="val", label=r"Single Muon $\eta$")),
@@ -103,7 +104,7 @@ class SingleMuonProcessor(processor.ProcessorABC):
             "single_muon_validCSCHits": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(60, 0, 60, name="val", label="Valid CSC Hits")),
             "single_muon_validHits": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(80, 0, 80, name="val", label="Total Valid Muon Hits")),
             "single_muon_dtStations": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(6, 0, 6, name="val", label="DT Stations with Valid Hits")),
-            "single_muon_dR_mb2": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(100, 0, 6, name="val", label=r"$\Delta R$ at MB2 (Reco vs Gen)")),
+            #"single_muon_dR_mb2": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(100, 0, 6, name="val", label=r"$\Delta R$ at MB2 (Reco vs Gen)")),
             "single_muon_timeAtIpInOut": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(25, -60, 60, name="val", label="Time at IP InOut [ns]")),
             "single_muon_timeAtIpInOutErr": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(50, 0, 3, name="val", label="Time at IP InOut Error [ns]")),
             "debug_dr3_eta_mb2": Hist(axis.StrCategory([], name="cat", label="Source", growth=True), axis.Regular(110, -105, 5, name="val", label=r"$\eta$ at MB2 ($\Delta R > 3.0$)")),
@@ -111,7 +112,7 @@ class SingleMuonProcessor(processor.ProcessorABC):
             "debug_dr3_eta_2d": Hist(axis.Regular(50, -3, 3, name="gen_eta", label=r"Gen $\eta$ at MB2"), axis.Regular(50, -3, 3, name="reco_eta", label=r"Reco $\eta$ at MB2")),
             "debug_dr3_phi_2d": Hist(axis.Regular(50, -3.2, 3.2, name="gen_phi", label=r"Gen $\phi$ at MB2"), axis.Regular(50, -3.2, 3.2, name="reco_phi", label=r"Reco $\phi$ at MB2")),
 
-            "two_muons_cos_alpha": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(200, -1.01, 1.01, name="val", label=r"$\cos\alpha$ (Upper vs Lower)")),
+            "two_muons_cos_alpha": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(100, -1.01, -0.9, name="val", label=r"$\cos\alpha$ (Upper vs Lower)")),
         }
 
     def process(self, events):
@@ -249,80 +250,63 @@ class SingleMuonProcessor(processor.ProcessorABC):
         if ak.sum(mask_multiple_disMuon_event) > 0:
             events = events[mask_multiple_disMuon_event]
             gen_muons = gen_muons[mask_multiple_disMuon_event]
+            dis_muons = events.DisMuon
 
-            '''
+            
             # This is for removing "duplicate" tracks
             #######################################################################################################
-            sorted_pt = events.DisMuon[ak.argsort(events.DisMuon.pt, axis=1, ascending=False)]
-            lead = sorted_pt[:, 0]
-            sublead = sorted_pt[:, 1]
+            sorted_muons = dis_muons[ak.argsort(dis_muons.pt, axis=1, ascending=False)]
+            lead_muon = sorted_muons[:, 0]
             
-            deta = lead.eta - sublead.eta
-            dphi = lead.delta_phi(sublead)
-            dpt = lead.pt - sublead.pt
-            
-            mask_same = (lead.charge * sublead.charge) > 0
-            is_duplicate = mask_same & (abs(deta) < 0.01) & (abs(dphi) < 0.001) & (abs(dpt) < 0.5)
-            
-            self.output["n_duplicates_removed"] += ak.sum(is_duplicate)
+            deta = sorted_muons.eta - lead_muon.eta
+            dphi = sorted_muons.delta_phi(lead_muon)
+            dpt = sorted_muons.pt - lead_muon.pt
+            mask_same_charge = (sorted_muons.charge * lead_muon.charge) > 0
 
-            # Filter all arrays used later
-            events = events[~is_duplicate]
-            gen_muons = gen_muons[~is_duplicate]
-            lead = lead[~is_duplicate]
-            sublead = sublead[~is_duplicate]
-            dis_muons = events.DisMuon
+            is_duplicate_track = mask_same_charge & (abs(deta) < 0.01) & (abs(dphi) < 0.001) & (abs(dpt) < 0.5)
+            is_duplicate_track = is_duplicate_track & (ak.local_index(sorted_muons, axis=1) > 0)
+            
+            self.output["n_duplicates_removed"] += ak.sum(is_duplicate_track)
+
+            cleaned_muons = sorted_muons[~is_duplicate_track]
+
+            # Let's print a warning if there are STILL >= 3 muons even after duplicate removal
+            has_3_muons_still = (ak.num(cleaned_muons) >= 3)
+            self.output["n_events_3plus_muons_post_cleaning"] += ak.sum(has_3_muons_still)
             #######################################################################################################
-            '''
-            dis_muons = events.DisMuon
+            
+            mask_exactly_two = (ak.num(cleaned_muons) == 2)
+            
+            events = events[mask_exactly_two]
+            gen_muons = gen_muons[mask_exactly_two]
+            final_muons = cleaned_muons[mask_exactly_two]
+            
+            lead = final_muons[:, 0]
+            sublead = final_muons[:, 1]
+
+            lead_quality_mask = (lead.mediumId == True) & (lead.pfRelIso03_all < 0.18)
+
+            events = events[lead_quality_mask]
+            gen_muons = gen_muons[lead_quality_mask]
+            final_muons = final_muons[lead_quality_mask]
 
             # Split into candidates based on Phi hemisphere
             # Upper: phi > 0, Lower: phi < 0
-            upper_candidates = dis_muons[dis_muons.phi > 0]
-            lower_candidates = dis_muons[dis_muons.phi < 0]
+            upper_candidates = final_muons[final_muons.phi > 0]
+            lower_candidates = final_muons[final_muons.phi < 0]
 
             # Count how many valid candidates exist in each hemisphere
             n_upper = ak.num(upper_candidates)
             n_lower = ak.num(lower_candidates)
-            n_total = ak.num(dis_muons)
 
-            # Criteria: At least 2 muons, AND (All Upper OR All Lower)
-            mask_same_side = (n_total >= 2) & ((n_upper == n_total) | (n_lower == n_total))
+            has_both_legs = (n_upper == 1) & (n_lower == 1)
             
-            # Only process if such events exist to avoid errors
-            if ak.sum(mask_same_side) > 0:
-                # Select the muons from these specific events
-                same_side_muons = dis_muons[mask_same_side]
-                
-                # Sort them by pT descending so we can distinguish Leading vs Subleading
-                same_side_sorted = same_side_muons[ak.argsort(same_side_muons.pt, axis=1, ascending=False)]
-
-                dr_same_side = same_side_sorted[:, 0].delta_r(same_side_sorted[:, 1])   
-                mask_has_third = ak.num(same_side_sorted) >= 3
-                
-            # has at least 3 muons
-            has_3_muons = (n_total >= 3)
-            if ak.any(has_3_muons):
-                print(f"WARNING: Events with >=3 muons")
-
-            has_both_legs = (n_upper >= 1) & (n_lower >= 1)
-            
-            # Apply mask to 'events' and auxiliary arrays to keep them synchronized
             events = events[has_both_legs]
             gen_muons = gen_muons[has_both_legs]
-            dis_muons = dis_muons[has_both_legs]
-
-            #lead = lead[has_both_legs]          
-            #sublead = sublead[has_both_legs]
-            
-            # Apply mask to our candidate arrays so we can pick the best ones from the valid events
             upper_candidates = upper_candidates[has_both_legs]
             lower_candidates = lower_candidates[has_both_legs]
 
-            upper_candidates = upper_candidates[ak.argsort(upper_candidates.pt, axis=1, ascending=False)]
-            lower_candidates = lower_candidates[ak.argsort(lower_candidates.pt, axis=1, ascending=False)]
-
-            # Now we have exactly one Upper and one Lower muon per valid event
+            # Extract the single upper and single lower muons
             upper = upper_candidates[:, 0]
             lower = lower_candidates[:, 0]
 
@@ -430,6 +414,12 @@ if __name__ == '__main__':
         treename="Events",
         processor_instance=SingleMuonProcessor(),
     )
+
+    print("\n" + "="*50)
+    print(f"Total events processed: {out['n_events_initial']}")
+    print(f"Total duplicate tracks removed: {out['n_duplicates_removed']}")
+    print(f"WARNING: Total events with >=3 muons AFTER cleaning: {out['n_events_3plus_muons_post_cleaning']}")
+    print("="*50 + "\n")
     
     OUTPUT_DIR = "single_muon_signal_vs_cosmic_plots"
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -440,18 +430,18 @@ if __name__ == '__main__':
     FILE_MODIFIER = "Stau_300_100mm_overlay"
 
     overlay_plots = [
-        "single_muon_dz_overlay",
-        "single_muon_validDTHits",
-        "single_muon_validCSCHits",
-        "single_muon_validHits",
-        "single_muon_dtStations",
-        "single_muon_pt",
-        "single_muon_eta",
-        "single_muon_phi",
-        "single_muon_dxy",
-        "single_muon_dR_mb2",
-        "single_muon_timeAtIpInOut",
-        "single_muon_timeAtIpInOutErr",
+        #"single_muon_dz_overlay",
+        #"single_muon_validDTHits",
+        #"single_muon_validCSCHits",
+        #"single_muon_validHits",
+        #"single_muon_dtStations",
+        #"single_muon_pt",
+        #"single_muon_eta",
+        #"single_muon_phi",
+        #"single_muon_dxy",
+        #"single_muon_dR_mb2",
+        #"single_muon_timeAtIpInOut",
+        #"single_muon_timeAtIpInOutErr",
         "two_muons_cos_alpha"
     ]
 
