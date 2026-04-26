@@ -53,22 +53,63 @@ def save_comparison_overlay(h, var_name, PREFIX, OUTPUT_DIR, title_suffix="", fi
     plt.close(fig)
     print(f"    Saved comparison plot to: {outpath}")
 
-def save_2d_plot(h, var_name, PREFIX, OUTPUT_DIR, title_suffix="", filename_suffix=""):
+def save_2d_profile_overlay(h, var_name, PREFIX, OUTPUT_DIR, title_suffix="", filename_suffix=""):
     import numpy as np
     if np.sum(h.values()) == 0:
         return
 
-    fig, ax = plt.subplots(figsize=(8, 7))
-    
-    # Plot the 2D colormap
-    h.plot2d(ax=ax, cmap="viridis")
-    
-    ax.set_title(f"dR > 3.0: {var_name} {title_suffix}")
-    
-    outpath = os.path.join(OUTPUT_DIR, f"{PREFIX}{var_name}_{filename_suffix}_2D.pdf")
-    fig.savefig(outpath)
-    plt.close(fig)
-    print(f"    Saved 2D plot to: {outpath}")
+    # Iterate through each category (Upper Cosmic, Lower Cosmic, Signal)
+    for label in h.axes["cat"]:
+        h_slice = h[{"cat": label}]
+        if np.sum(h_slice.values()) == 0:
+            continue
+
+        fig, ax = plt.subplots(figsize=(8, 7))
+
+        # Plot the 2D colormap
+        h_slice.plot2d(ax=ax, cmap="viridis")
+
+        # Calculate the profile (Mean Y per X bin)
+        # h_slice is 2D because the "cat" axis was sliced out
+        x_centers = h_slice.axes[0].centers
+        y_centers = h_slice.axes[1].centers
+        counts = h_slice.values() 
+
+        profile_x = []
+        profile_y = []
+        profile_yerr = []
+
+        for i in range(len(x_centers)):
+            bin_counts = counts[i, :]
+            total_in_bin = np.sum(bin_counts)
+            if total_in_bin > 0:
+                mean_y = np.average(y_centers, weights=bin_counts)
+                # Calculate standard error of the mean for accurate error bars
+                variance = np.average((y_centers - mean_y)**2, weights=bin_counts)
+                std_dev = np.sqrt(variance)
+                std_err = std_dev / np.sqrt(total_in_bin) 
+
+                profile_x.append(x_centers[i])
+                profile_y.append(mean_y)
+                profile_yerr.append(std_err)
+
+        # Overlay the profile
+        if profile_x:
+            ax.errorbar(
+                profile_x, profile_y, yerr=profile_yerr, 
+                fmt='o', color='red', markersize=5, ecolor='red', 
+                capsize=3, label="Profile (Mean ± StdErr)"
+            )
+            ax.legend()
+
+        ax.set_title(f"{label}: {var_name} {title_suffix}")
+
+        safe_label = label.replace(" ", "_").replace("(", "").replace(")", "")
+        outpath = os.path.join(OUTPUT_DIR, f"{PREFIX}{var_name}_{safe_label}_{filename_suffix}.pdf")
+        fig.savefig(outpath)
+        plt.close(fig)
+        print(f"    Saved 2D profile plot to: {outpath}")
+
 
 def delta_r_mb2_prop(reco_obj, gen_obj):
     """
@@ -94,6 +135,9 @@ class SingleMuonProcessor(processor.ProcessorABC):
             "n_events_initial": 0,
             "n_duplicates_removed": 0,
             "n_events_3plus_muons_post_cleaning": 0,
+            "n_cosmic_events_total": 0,
+            "n_cosmic_events_1_muon": 0,
+            "n_cosmic_events_2plus_muons": 0,
             
             "single_muon_pt": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(100, 0, 100, name="val", label=r"Single Muon $p_T$ [GeV]")),
             "single_muon_eta": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(100, -2.5, 2.5, name="val", label=r"Single Muon $\eta$")),
@@ -104,15 +148,35 @@ class SingleMuonProcessor(processor.ProcessorABC):
             "single_muon_validCSCHits": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(60, 0, 60, name="val", label="Valid CSC Hits")),
             "single_muon_validHits": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(80, 0, 80, name="val", label="Total Valid Muon Hits")),
             "single_muon_dtStations": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(6, 0, 6, name="val", label="DT Stations with Valid Hits")),
-            #"single_muon_dR_mb2": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(100, 0, 6, name="val", label=r"$\Delta R$ at MB2 (Reco vs Gen)")),
             "single_muon_timeAtIpInOut": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(25, -60, 60, name="val", label="Time at IP InOut [ns]")),
-            "single_muon_timeAtIpInOutErr": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(50, 0, 3, name="val", label="Time at IP InOut Error [ns]")),
+            "single_muon_timeAtIpInOutErr": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(75, 0, 5, name="val", label="Time at IP InOut Error [ns]")),
+            "single_muon_timeNDof": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(50, 0, 50, name="val", label="timeNDof")),
+            
             "debug_dr3_eta_mb2": Hist(axis.StrCategory([], name="cat", label="Source", growth=True), axis.Regular(110, -105, 5, name="val", label=r"$\eta$ at MB2 ($\Delta R > 3.0$)")),
             "debug_dr3_phi_mb2": Hist(axis.StrCategory([], name="cat", label="Source", growth=True), axis.Regular(110, -105, 5, name="val", label=r"$\phi$ at MB2 ($\Delta R > 3.0$)")),
-            "debug_dr3_eta_2d": Hist(axis.Regular(50, -3, 3, name="gen_eta", label=r"Gen $\eta$ at MB2"), axis.Regular(50, -3, 3, name="reco_eta", label=r"Reco $\eta$ at MB2")),
-            "debug_dr3_phi_2d": Hist(axis.Regular(50, -3.2, 3.2, name="gen_phi", label=r"Gen $\phi$ at MB2"), axis.Regular(50, -3.2, 3.2, name="reco_phi", label=r"Reco $\phi$ at MB2")),
 
             "two_muons_cos_alpha": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(100, -1.01, -0.9, name="val", label=r"$\cos\alpha$ (Upper vs Lower)")),
+            
+            "single_muon_timing_err_ndof7": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(60, 0, 3, name="val", label="Time Error [ns] (Single, nDof > 7)")),
+            "single_muon_timeErr_DT_only": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(60, 0, 3, name="val", label="Time Error [ns] (DT > 0, CSC == 0)")),
+            "single_muon_timeErr_CSC_only": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(60, 0, 3, name="val", label="Time Error [ns] (DT == 0, CSC > 0)")),
+            "single_muon_timeErr_DT_CSC_both": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(60, 0, 3, name="val", label="Time Error [ns] (DT > 0, CSC > 0)")),
+
+            "single_muon_timeErr_vs_DTHits": Hist(
+                axis.StrCategory([], name="cat", growth=True), 
+                axis.Regular(60, 0, 60, name="hits", label="Valid DT Hits"), 
+                axis.Regular(45, 0, 3, name="err", label="Time Error [ns]")
+            ),
+            "single_muon_timeErr_vs_CSCHits": Hist(
+                axis.StrCategory([], name="cat", growth=True), 
+                axis.Regular(60, 0, 60, name="hits", label="Valid CSC Hits"), 
+                axis.Regular(45, 0, 3, name="err", label="Time Error [ns]")
+            ),
+            "single_muon_timeErr_vs_TotalHits": Hist(
+                axis.StrCategory([], name="cat", growth=True), 
+                axis.Regular(60, 0, 60, name="hits", label="Total DT + CSC Hits"), 
+                axis.Regular(45, 0, 3, name="err", label="Time Error [ns]")
+            ),
         }
 
     def process(self, events):
@@ -152,7 +216,6 @@ class SingleMuonProcessor(processor.ProcessorABC):
             "phi_at_mb2": events.GenPart.phi_at_mb2,
         }
 
-        # Add propagated fields ONLY if they exist in the file
         if "prop_eta_at_mb2" in events.GenPart.fields:
             genpart_dict["prop_eta_at_mb2"] = events.GenPart.prop_eta_at_mb2
             genpart_dict["prop_phi_at_mb2"] = events.GenPart.prop_phi_at_mb2
@@ -168,16 +231,22 @@ class SingleMuonProcessor(processor.ProcessorABC):
 
         gen_muons = events.GenPart[
             (abs(events.GenPart.pdgId) == 13) & 
-            (events.GenPart.status == 1) #& (abs(events.GenPart.distinctParent.distinctParent.pdgId) == 1000015)
+            (events.GenPart.status == 1) 
         ]
         
         dis_muons = events.DisMuon
         n_dismuons = ak.num(dis_muons)
 
+        is_cosmic = "Cosmic" in dataset or dataset.startswith("LooseMu") or dataset == "test_cosmics_calib"
+        ds_label = "Cosmic" if is_cosmic else "Signal"
+        
+        # Track the total raw events explicitly before filtering
+        if is_cosmic:
+            self.output["n_cosmic_events_total"] += len(events)
+
         # ==========================================
-        # 1. SINGLE MUON LOGIC
+        # SINGLE MUON LOGIC
         # ==========================================
-        # Require exactly 1 DisMuon
         mask_single = (n_dismuons == 1) & (ak.num(gen_muons) >= 1)
         
         if ak.sum(mask_single) > 0:
@@ -189,9 +258,11 @@ class SingleMuonProcessor(processor.ProcessorABC):
             
             single_muons = single_muons[mask_medium & mask_iso]
             valid_gen_muons = valid_gen_muons[mask_medium & mask_iso]
+            
+            if is_cosmic:
+                self.output["n_cosmic_events_1_muon"] += len(single_muons)
 
-            # Cosmic Logic
-            if dataset.startswith("LooseMu") or dataset == "test_cosmics_calib":
+            if is_cosmic:
                 mask_upper_single = single_muons.phi > 0
                 mask_lower_single = single_muons.phi < 0
                 upper_singles = single_muons[mask_upper_single]
@@ -208,6 +279,21 @@ class SingleMuonProcessor(processor.ProcessorABC):
                     self.output["single_muon_dtStations"].fill(cat="Upper Cosmic", val=upper_singles.dtStationsWithValidHits)
                     self.output["single_muon_timeAtIpInOut"].fill(cat="Upper Cosmic", val=upper_singles.timeAtIpInOut)
                     self.output["single_muon_timeAtIpInOutErr"].fill(cat="Upper Cosmic", val=upper_singles.timeAtIpInOutErr)
+                    self.output["single_muon_timeNDof"].fill(cat="Upper Cosmic", val=upper_singles.timeNDof)
+                    self.output["single_muon_timing_err_ndof7"].fill(cat="Upper Cosmic", val=upper_singles[upper_singles.timeNDof > 7].timeAtIpInOutErr)
+                    
+                    # DT/CSC masks for Upper Cosmic
+                    up_dt_only = (upper_singles.numberOfValidMuonDTHits > 0) & (upper_singles.numberOfValidMuonCSCHits == 0)
+                    up_csc_only = (upper_singles.numberOfValidMuonDTHits == 0) & (upper_singles.numberOfValidMuonCSCHits > 0)
+                    up_both = (upper_singles.numberOfValidMuonDTHits > 0) & (upper_singles.numberOfValidMuonCSCHits > 0)
+                    
+                    self.output["single_muon_timeErr_DT_only"].fill(cat="Upper Cosmic", val=upper_singles[up_dt_only].timeAtIpInOutErr)
+                    self.output["single_muon_timeErr_CSC_only"].fill(cat="Upper Cosmic", val=upper_singles[up_csc_only].timeAtIpInOutErr)
+                    self.output["single_muon_timeErr_DT_CSC_both"].fill(cat="Upper Cosmic", val=upper_singles[up_both].timeAtIpInOutErr)
+
+                    self.output["single_muon_timeErr_vs_DTHits"].fill(cat="Upper Cosmic", hits=upper_singles.numberOfValidMuonDTHits[up_dt_only], err=upper_singles.timeAtIpInOutErr[up_dt_only])
+                    self.output["single_muon_timeErr_vs_CSCHits"].fill(cat="Upper Cosmic", hits=upper_singles.numberOfValidMuonCSCHits[up_csc_only], err=upper_singles.timeAtIpInOutErr[up_csc_only])
+                    self.output["single_muon_timeErr_vs_TotalHits"].fill(cat="Upper Cosmic", hits=(upper_singles.numberOfValidMuonDTHits[up_both] + upper_singles.numberOfValidMuonCSCHits[up_both]), err=upper_singles.timeAtIpInOutErr[up_both])
                 if len(lower_singles) > 0:
                     self.output["single_muon_dz_overlay"].fill(cat="Lower Cosmic", val=lower_singles.dz)
                     self.output["single_muon_pt"].fill(cat="Lower Cosmic", val=lower_singles.pt)
@@ -220,17 +306,27 @@ class SingleMuonProcessor(processor.ProcessorABC):
                     self.output["single_muon_dtStations"].fill(cat="Lower Cosmic", val=lower_singles.dtStationsWithValidHits)
                     self.output["single_muon_timeAtIpInOut"].fill(cat="Lower Cosmic", val=lower_singles.timeAtIpInOut)
                     self.output["single_muon_timeAtIpInOutErr"].fill(cat="Lower Cosmic", val=lower_singles.timeAtIpInOutErr)
-            
-            # Signal Logic
-            elif dataset == "Stau_300_100mm":
-                
-                # Propagated Logic
+                    self.output["single_muon_timeNDof"].fill(cat="Lower Cosmic", val=lower_singles.timeNDof)
+                    self.output["single_muon_timing_err_ndof7"].fill(cat="Lower Cosmic", val=lower_singles[lower_singles.timeNDof > 7].timeAtIpInOutErr)
+                    
+                    # DT/CSC masks for Lower Cosmic
+                    dn_dt_only = (lower_singles.numberOfValidMuonDTHits > 0) & (lower_singles.numberOfValidMuonCSCHits == 0)
+                    dn_csc_only = (lower_singles.numberOfValidMuonDTHits == 0) & (lower_singles.numberOfValidMuonCSCHits > 0)
+                    dn_both = (lower_singles.numberOfValidMuonDTHits > 0) & (lower_singles.numberOfValidMuonCSCHits > 0)
+                    
+                    self.output["single_muon_timeErr_DT_only"].fill(cat="Lower Cosmic", val=lower_singles[dn_dt_only].timeAtIpInOutErr)
+                    self.output["single_muon_timeErr_CSC_only"].fill(cat="Lower Cosmic", val=lower_singles[dn_csc_only].timeAtIpInOutErr)
+                    self.output["single_muon_timeErr_DT_CSC_both"].fill(cat="Lower Cosmic", val=lower_singles[dn_both].timeAtIpInOutErr)
+
+                    self.output["single_muon_timeErr_vs_DTHits"].fill(cat="Lower Cosmic", hits=lower_singles.numberOfValidMuonDTHits[dn_dt_only], err=lower_singles.timeAtIpInOutErr[dn_dt_only])
+                    self.output["single_muon_timeErr_vs_CSCHits"].fill(cat="Lower Cosmic", hits=lower_singles.numberOfValidMuonCSCHits[dn_csc_only], err=lower_singles.timeAtIpInOutErr[dn_csc_only])
+                    self.output["single_muon_timeErr_vs_TotalHits"].fill(cat="Lower Cosmic", hits=(lower_singles.numberOfValidMuonDTHits[dn_both] + lower_singles.numberOfValidMuonCSCHits[dn_both]), err=lower_singles.timeAtIpInOutErr[dn_both])
+            else:
                 dr_mb2_prop_array = delta_r_mb2_prop(single_muons, valid_gen_muons)
                 min_dr_mb2_prop = ak.min(dr_mb2_prop_array, axis=1)
                 mask_dr_prop = ak.fill_none(min_dr_mb2_prop < 0.4, False)
                 matched_muons_prop = single_muons[mask_dr_prop]
                 
-                # Fill Propagated Matches
                 if len(matched_muons_prop) > 0:
                     self.output["single_muon_dz_overlay"].fill(cat="Signal (Propagated)", val=matched_muons_prop.dz)
                     self.output["single_muon_pt"].fill(cat="Signal (Propagated)", val=matched_muons_prop.pt)
@@ -243,8 +339,26 @@ class SingleMuonProcessor(processor.ProcessorABC):
                     self.output["single_muon_dtStations"].fill(cat="Signal (Propagated)", val=matched_muons_prop.dtStationsWithValidHits)
                     self.output["single_muon_timeAtIpInOut"].fill(cat="Signal (Propagated)", val=matched_muons_prop.timeAtIpInOut)
                     self.output["single_muon_timeAtIpInOutErr"].fill(cat="Signal (Propagated)", val=matched_muons_prop.timeAtIpInOutErr)
-                
-        # Filter for at least 2 DisMuons AND at least 1 GenMuon (Event-level filter)
+                    self.output["single_muon_timeNDof"].fill(cat="Signal (Propagated)", val=matched_muons_prop.timeNDof)
+                    self.output["single_muon_timing_err_ndof7"].fill(cat="Signal (Propagated)", val=matched_muons_prop[matched_muons_prop.timeNDof > 7].timeAtIpInOutErr)
+                    
+                    # DT/CSC masks for Signal
+                    sig_dt_only = (matched_muons_prop.numberOfValidMuonDTHits > 0) & (matched_muons_prop.numberOfValidMuonCSCHits == 0)
+                    sig_csc_only = (matched_muons_prop.numberOfValidMuonDTHits == 0) & (matched_muons_prop.numberOfValidMuonCSCHits > 0)
+                    sig_both = (matched_muons_prop.numberOfValidMuonDTHits > 0) & (matched_muons_prop.numberOfValidMuonCSCHits > 0)
+                    
+                    self.output["single_muon_timeErr_DT_only"].fill(cat="Signal (Propagated)", val=matched_muons_prop[sig_dt_only].timeAtIpInOutErr)
+                    self.output["single_muon_timeErr_CSC_only"].fill(cat="Signal (Propagated)", val=matched_muons_prop[sig_csc_only].timeAtIpInOutErr)
+                    self.output["single_muon_timeErr_DT_CSC_both"].fill(cat="Signal (Propagated)", val=matched_muons_prop[sig_both].timeAtIpInOutErr)
+
+                    self.output["single_muon_timeErr_vs_DTHits"].fill(cat="Signal (Propagated)", hits=matched_muons_prop.numberOfValidMuonDTHits[sig_dt_only], err=matched_muons_prop.timeAtIpInOutErr[sig_dt_only])
+                    self.output["single_muon_timeErr_vs_CSCHits"].fill(cat="Signal (Propagated)", hits=matched_muons_prop.numberOfValidMuonCSCHits[sig_csc_only], err=matched_muons_prop.timeAtIpInOutErr[sig_csc_only])
+                    #self.output["single_muon_timeErr_vs_DTHits"].fill(cat="Signal (Propagated)", hits=matched_muons_prop.numberOfValidMuonDTHits[sig_both], err=matched_muons_prop.timeAtIpInOutErr[sig_both])
+                    #self.output["single_muon_timeErr_vs_CSCHits"].fill(cat="Signal (Propagated)", hits=matched_muons_prop.numberOfValidMuonCSCHits[sig_both], err=matched_muons_prop.timeAtIpInOutErr[sig_both])
+                    self.output["single_muon_timeErr_vs_TotalHits"].fill(cat="Signal (Propagated)", hits=(matched_muons_prop.numberOfValidMuonDTHits[sig_both] + matched_muons_prop.numberOfValidMuonCSCHits[sig_both]), err=matched_muons_prop.timeAtIpInOutErr[sig_both])
+        # ==========================================
+        # MULTIPLE MUON LOGIC
+        # ==========================================
         mask_multiple_disMuon_event = (ak.num(events.DisMuon) >= 2) & (ak.num(gen_muons) >= 1)
         
         if ak.sum(mask_multiple_disMuon_event) > 0:
@@ -252,108 +366,74 @@ class SingleMuonProcessor(processor.ProcessorABC):
             gen_muons = gen_muons[mask_multiple_disMuon_event]
             dis_muons = events.DisMuon
 
+            # --- Apply cuts to Leading pT Muon First ---
+            sorted_muons_temp = dis_muons[ak.argsort(dis_muons.pt, axis=1, ascending=False)]
+            lead_muon_eval = sorted_muons_temp[:, 0]
             
-            # This is for removing "duplicate" tracks
-            #######################################################################################################
-            sorted_muons = dis_muons[ak.argsort(dis_muons.pt, axis=1, ascending=False)]
-            lead_muon = sorted_muons[:, 0]
+            lead_quality_mask = (lead_muon_eval.mediumId == True) & (lead_muon_eval.pfRelIso03_all < 0.18)
             
-            deta = sorted_muons.eta - lead_muon.eta
-            dphi = sorted_muons.delta_phi(lead_muon)
-            dpt = sorted_muons.pt - lead_muon.pt
-            mask_same_charge = (sorted_muons.charge * lead_muon.charge) > 0
-
-            is_duplicate_track = mask_same_charge & (abs(deta) < 0.01) & (abs(dphi) < 0.001) & (abs(dpt) < 0.5)
-            is_duplicate_track = is_duplicate_track & (ak.local_index(sorted_muons, axis=1) > 0)
-            
-            self.output["n_duplicates_removed"] += ak.sum(is_duplicate_track)
-
-            cleaned_muons = sorted_muons[~is_duplicate_track]
-
-            # Let's print a warning if there are STILL >= 3 muons even after duplicate removal
-            has_3_muons_still = (ak.num(cleaned_muons) >= 3)
-            self.output["n_events_3plus_muons_post_cleaning"] += ak.sum(has_3_muons_still)
-            #######################################################################################################
-            
-            mask_exactly_two = (ak.num(cleaned_muons) == 2)
-            
-            events = events[mask_exactly_two]
-            gen_muons = gen_muons[mask_exactly_two]
-            final_muons = cleaned_muons[mask_exactly_two]
-            
-            lead = final_muons[:, 0]
-            sublead = final_muons[:, 1]
-
-            lead_quality_mask = (lead.mediumId == True) & (lead.pfRelIso03_all < 0.18)
-
+            # Remove the event entirely if the leading muon fails the cuts
             events = events[lead_quality_mask]
             gen_muons = gen_muons[lead_quality_mask]
-            final_muons = final_muons[lead_quality_mask]
-
-            # Split into candidates based on Phi hemisphere
-            # Upper: phi > 0, Lower: phi < 0
-            upper_candidates = final_muons[final_muons.phi > 0]
-            lower_candidates = final_muons[final_muons.phi < 0]
-
-            # Count how many valid candidates exist in each hemisphere
-            n_upper = ak.num(upper_candidates)
-            n_lower = ak.num(lower_candidates)
-
-            has_both_legs = (n_upper == 1) & (n_lower == 1)
+            sorted_muons = sorted_muons_temp[lead_quality_mask]
             
-            events = events[has_both_legs]
-            gen_muons = gen_muons[has_both_legs]
-            upper_candidates = upper_candidates[has_both_legs]
-            lower_candidates = lower_candidates[has_both_legs]
+            # --- COUNTER: >= 2 Muons Post-Cut ---
+            if is_cosmic:
+                self.output["n_cosmic_events_2plus_muons"] += len(events)
 
-            # Extract the single upper and single lower muons
-            upper = upper_candidates[:, 0]
-            lower = lower_candidates[:, 0]
+            # Duplicate track removal
+            #######################################################################################################
+            if len(events) > 0:
+                lead_muon = sorted_muons[:, 0]
+                
+                deta = sorted_muons.eta - lead_muon.eta
+                dphi = sorted_muons.delta_phi(lead_muon)
+                dpt = sorted_muons.pt - lead_muon.pt
+                mask_same_charge = (sorted_muons.charge * lead_muon.charge) > 0
 
-            '''
-            ndof_quality = (upper.timeNDof > 7) & (lower.timeNDof > 7)
-            lower_eta = (abs(lower.eta) < 0.7)
-            lower_phi = (lower.phi > -3 * np.pi / 4) & (lower.phi < -np.pi / 4)
-            lower_pt = (lower.pt > 12.5)
-            upper_pt  = (upper.pt > 3.5)
-            lower_dt_hits = (lower.numberOfValidMuonDTHits > 30)
-            upper_dz = (abs(upper.dz) < 200)
+                is_duplicate_track = mask_same_charge & (abs(deta) < 0.01) & (abs(dphi) < 0.001) & (abs(dpt) < 0.5)
+                is_duplicate_track = is_duplicate_track & (ak.local_index(sorted_muons, axis=1) > 0)
+                
+                self.output["n_duplicates_removed"] += ak.sum(is_duplicate_track)
 
-            #lower_standalone = lower.isStandalone
-            #upper_standalone = upper.isStandalone
+                cleaned_muons = sorted_muons[~is_duplicate_track]
 
-            final_quality_mask = ndof_quality & lower_eta & lower_phi & lower_pt & upper_pt & lower_dt_hits & upper_dz #& lower_standalone & upper_standalone
+                has_3_muons_still = (ak.num(cleaned_muons) >= 3)
+                self.output["n_events_3plus_muons_post_cleaning"] += ak.sum(has_3_muons_still)
+                #######################################################################################################
+                
+                mask_exactly_two = (ak.num(cleaned_muons) == 2)
+                
+                events = events[mask_exactly_two]
+                gen_muons = gen_muons[mask_exactly_two]
+                final_muons = cleaned_muons[mask_exactly_two]
+                
+                if ak.sum(mask_exactly_two) > 0:
+                    upper_candidates = final_muons[final_muons.phi > 0]
+                    lower_candidates = final_muons[final_muons.phi < 0]
 
-            events = events[final_quality_mask]
-            gen_muons = gen_muons[final_quality_mask]
-            dis_muons = dis_muons[final_quality_mask]
+                    n_upper = ak.num(upper_candidates)
+                    n_lower = ak.num(lower_candidates)
 
-            lead = lead[final_quality_mask]          
-            sublead = sublead[final_quality_mask]
+                    has_both_legs = (n_upper == 1) & (n_lower == 1)
+                    
+                    events = events[has_both_legs]
+                    gen_muons = gen_muons[has_both_legs]
+                    upper_candidates = upper_candidates[has_both_legs]
+                    lower_candidates = lower_candidates[has_both_legs]
 
-            upper = upper[final_quality_mask]
-            lower = lower[final_quality_mask]
-            '''
+                    if ak.sum(has_both_legs) > 0:
+                        upper = upper_candidates[:, 0]
+                        lower = lower_candidates[:, 0]
 
-            # Calculate cosA based on upper and lower muons instead of leading pT muons
-            dot_product = upper.px * lower.px + upper.py * lower.py + upper.pz * lower.pz
-            denominator = upper.p * lower.p
-            cosA = ak.where(denominator != 0, dot_product / denominator, -1000.0)
+                        dot_product = upper.px * lower.px + upper.py * lower.py + upper.pz * lower.pz
+                        denominator = upper.p * lower.p
+                        cosA = ak.where(denominator != 0, dot_product / denominator, -1000.0)
 
-            #exact_two_mask = ak.num(dis_muons) == 2
-            
-            if dataset.startswith("LooseMu") or dataset == "test_cosmics_calib":
-                self.output["two_muons_cos_alpha"].fill(
-                        cat=dataset,
-                        val=cosA
-                    )
-                '''
-                if ak.any(exact_two_mask):
-                    self.output["two_muons_cos_alpha"].fill(
-                        cat=dataset,
-                        val=cosA[exact_two_mask]
-                    )
-                '''    
+                        self.output["two_muons_cos_alpha"].fill(
+                                cat=ds_label,
+                                val=cosA
+                            )
 
         return self.output
 
@@ -362,24 +442,8 @@ class SingleMuonProcessor(processor.ProcessorABC):
 
 if __name__ == '__main__':
     
-    '''
-    fileset = {
-        "test_cosmics_calib": [
-            "root://eoscms.cern.ch//eos/cms/store/user/fiorendi/displacedTaus/test_cosmics_calib/nano_fix_calibrations.root"
-        ]
-    }
-
-    print("Starting Processor for test_cosmics_calib...")
-    executor = processor.FuturesExecutor(workers=8)
-    runner = processor.Runner(
-        executor=executor,
-        schema=PFNanoAODSchema,
-        chunksize=50_000,
-    )
-    '''
-    
     # Load the preprocessed Cosmic pickle file
-    cosmic_pkl = "samples/Summer22_CHS_v17_Cosmic/Cosmic_preprocessed.pkl"
+    cosmic_pkl = "samples/Summer22_CHS_v19_Cosmic/Cosmic_preprocessed.pkl"
     print(f"Loading preprocessed Cosmics from {cosmic_pkl}...")
     with open(cosmic_pkl, "rb") as f:
         combined_runnable = pickle.load(f)
@@ -394,21 +458,14 @@ if __name__ == '__main__':
     combined_runnable.update(signal_runnable)
     
     # Run the Processor
-    #print("Starting Processor with combined Signal and Cosmic samples...")
-    print("Starting Processor for test_cosmics_calib...")
+    print("Starting Processor...")
     executor = processor.FuturesExecutor(workers=8)
     runner = processor.Runner(
         executor=executor,
         schema=PFNanoAODSchema,
         chunksize=50_000,
     )
-    '''
-    out = runner(
-        fileset,
-        treename="Events",
-        processor_instance=SingleMuonProcessor(),
-    )
-    '''
+    
     out = runner(
         combined_runnable,
         treename="Events",
@@ -419,6 +476,14 @@ if __name__ == '__main__':
     print(f"Total events processed: {out['n_events_initial']}")
     print(f"Total duplicate tracks removed: {out['n_duplicates_removed']}")
     print(f"WARNING: Total events with >=3 muons AFTER cleaning: {out['n_events_3plus_muons_post_cleaning']}")
+    tot_cosmic = out['n_cosmic_events_total']
+    if tot_cosmic > 0:
+        pct_1 = (out['n_cosmic_events_1_muon'] / tot_cosmic) * 100
+        pct_2 = (out['n_cosmic_events_2plus_muons'] / tot_cosmic) * 100
+        print("\nCOSMIC MUON MULTIPLICITY (After Lead/Single Quality Cuts):")
+        print(f"  Total Cosmic Events Processed: {tot_cosmic}")
+        print(f"  Single DisMuon (Passes Cuts):  {out['n_cosmic_events_1_muon']} ({pct_1:.2f}%)")
+        print(f"  >= 2 DisMuons (Lead Pass Cuts): {out['n_cosmic_events_2plus_muons']} ({pct_2:.2f}%)")
     print("="*50 + "\n")
     
     OUTPUT_DIR = "single_muon_signal_vs_cosmic_plots"
@@ -439,10 +504,21 @@ if __name__ == '__main__':
         #"single_muon_eta",
         #"single_muon_phi",
         #"single_muon_dxy",
-        #"single_muon_dR_mb2",
+        #"single_muon_timeNDof",
         #"single_muon_timeAtIpInOut",
         #"single_muon_timeAtIpInOutErr",
-        "two_muons_cos_alpha"
+        #"single_muon_timing_err_ndof7",
+        #"single_muon_timeErr_DT_only",
+        #"single_muon_timeErr_CSC_only",
+        #"single_muon_timeErr_DT_CSC_both",
+        #"two_muons_cos_alpha",
+
+    ]
+
+    profile_plots = [
+        "single_muon_timeErr_vs_DTHits",
+        "single_muon_timeErr_vs_CSCHits",
+        "single_muon_timeErr_vs_TotalHits"
     ]
 
     for key, hist_obj in out.items():
@@ -450,7 +526,9 @@ if __name__ == '__main__':
             continue
   
         if key in overlay_plots:
-            # Set normalize=False so you can clearly see the raw stats shift
             save_comparison_overlay(hist_obj, key, PREFIX, OUTPUT_DIR, title_suffix=TITLE_MODIFIER, filename_suffix=FILE_MODIFIER, normalize=True)
-    
+            
+        elif key in profile_plots:
+            save_2d_profile_overlay(hist_obj, key, PREFIX, OUTPUT_DIR, title_suffix=TITLE_MODIFIER, filename_suffix=FILE_MODIFIER)
+            
     print("Done!")
