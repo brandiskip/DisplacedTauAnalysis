@@ -138,7 +138,23 @@ class SingleMuonProcessor(processor.ProcessorABC):
             "n_cosmic_events_total": 0,
             "n_cosmic_events_1_muon": 0,
             "n_cosmic_events_2plus_muons": 0,
-            
+
+            "cosmic_n_dismuons": Hist(
+                axis.StrCategory([], name="cat", label="Category", growth=True), 
+                axis.Regular(5, 0, 5, name="val", label="Number of DisMuons per Event")
+            ),
+            "cosmic_isStandalone_all": Hist(
+                axis.StrCategory([], name="cat", label="Category", growth=True), 
+                axis.IntCategory([0, 1], name="val", label="All DisMuons: Global (0) vs Standalone (1)")
+            ),
+            "cosmic_isStandalone_single": Hist(
+                axis.StrCategory([], name="cat", label="Category", growth=True), 
+                axis.IntCategory([0, 1], name="val", label="Single Muon: Global (0) vs Standalone (1)")
+            ),
+            "cosmic_isStandalone_two": Hist(
+                axis.StrCategory([], name="cat", label="Category", growth=True), 
+                axis.IntCategory([0, 1], name="val", label="Two Muons: Global (0) vs Standalone (1)")
+            ),
             "single_muon_pt": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(100, 0, 100, name="val", label=r"Single Muon $p_T$ [GeV]")),
             "single_muon_eta": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(100, -2.5, 2.5, name="val", label=r"Single Muon $\eta$")),
             "single_muon_phi": Hist(axis.StrCategory([], name="cat", label="Muon Category", growth=True), axis.Regular(100, -np.pi, np.pi, name="val", label=r"Single Muon $\phi$")),
@@ -244,6 +260,13 @@ class SingleMuonProcessor(processor.ProcessorABC):
         if is_cosmic:
             self.output["n_cosmic_events_total"] += len(events)
 
+            self.output["cosmic_n_dismuons"].fill(cat="All Cosmics", val=n_dismuons)
+            
+            # Flatten to evaluate every muon across the cosmic events
+            flat_cosmic_muons = ak.flatten(dis_muons)
+            standalone_vals_all = ak.where(flat_cosmic_muons.isStandalone, 1, 0)
+            self.output["cosmic_isStandalone_all"].fill(cat="All Cosmics", val=standalone_vals_all)
+
         # ==========================================
         # SINGLE MUON LOGIC
         # ==========================================
@@ -252,13 +275,13 @@ class SingleMuonProcessor(processor.ProcessorABC):
         if ak.sum(mask_single) > 0:
             single_muons = events.DisMuon[mask_single][:, 0]
             valid_gen_muons = gen_muons[mask_single]
-            
+            '''
             mask_medium = (single_muons.mediumId == True)
             mask_iso = (single_muons.pfRelIso03_all < 0.18)
             
             single_muons = single_muons[mask_medium & mask_iso]
             valid_gen_muons = valid_gen_muons[mask_medium & mask_iso]
-            
+            '''
             if is_cosmic:
                 self.output["n_cosmic_events_1_muon"] += len(single_muons)
 
@@ -294,6 +317,11 @@ class SingleMuonProcessor(processor.ProcessorABC):
                     self.output["single_muon_timeErr_vs_DTHits"].fill(cat="Upper Cosmic", hits=upper_singles.numberOfValidMuonDTHits[up_dt_only], err=upper_singles.timeAtIpInOutErr[up_dt_only])
                     self.output["single_muon_timeErr_vs_CSCHits"].fill(cat="Upper Cosmic", hits=upper_singles.numberOfValidMuonCSCHits[up_csc_only], err=upper_singles.timeAtIpInOutErr[up_csc_only])
                     self.output["single_muon_timeErr_vs_TotalHits"].fill(cat="Upper Cosmic", hits=(upper_singles.numberOfValidMuonDTHits[up_both] + upper_singles.numberOfValidMuonCSCHits[up_both]), err=upper_singles.timeAtIpInOutErr[up_both])
+
+                    self.output["cosmic_isStandalone_single"].fill(
+                        cat="Upper Single", 
+                        val=ak.where(upper_singles.isStandalone, 1, 0)
+                    )
                 if len(lower_singles) > 0:
                     self.output["single_muon_dz_overlay"].fill(cat="Lower Cosmic", val=lower_singles.dz)
                     self.output["single_muon_pt"].fill(cat="Lower Cosmic", val=lower_singles.pt)
@@ -321,6 +349,11 @@ class SingleMuonProcessor(processor.ProcessorABC):
                     self.output["single_muon_timeErr_vs_DTHits"].fill(cat="Lower Cosmic", hits=lower_singles.numberOfValidMuonDTHits[dn_dt_only], err=lower_singles.timeAtIpInOutErr[dn_dt_only])
                     self.output["single_muon_timeErr_vs_CSCHits"].fill(cat="Lower Cosmic", hits=lower_singles.numberOfValidMuonCSCHits[dn_csc_only], err=lower_singles.timeAtIpInOutErr[dn_csc_only])
                     self.output["single_muon_timeErr_vs_TotalHits"].fill(cat="Lower Cosmic", hits=(lower_singles.numberOfValidMuonDTHits[dn_both] + lower_singles.numberOfValidMuonCSCHits[dn_both]), err=lower_singles.timeAtIpInOutErr[dn_both])
+
+                    self.output["cosmic_isStandalone_single"].fill(
+                        cat="Lower Single", 
+                        val=ak.where(lower_singles.isStandalone, 1, 0)
+                    )
             else:
                 dr_mb2_prop_array = delta_r_mb2_prop(single_muons, valid_gen_muons)
                 min_dr_mb2_prop = ak.min(dr_mb2_prop_array, axis=1)
@@ -370,8 +403,8 @@ class SingleMuonProcessor(processor.ProcessorABC):
             sorted_muons_temp = dis_muons[ak.argsort(dis_muons.pt, axis=1, ascending=False)]
             lead_muon_eval = sorted_muons_temp[:, 0]
             
-            lead_quality_mask = (lead_muon_eval.mediumId == True) & (lead_muon_eval.pfRelIso03_all < 0.18)
-            
+            #lead_quality_mask = (lead_muon_eval.mediumId == True) & (lead_muon_eval.pfRelIso03_all < 0.18)
+            lead_quality_mask = (lead_muon_eval.pt > -1)
             # Remove the event entirely if the leading muon fails the cuts
             events = events[lead_quality_mask]
             gen_muons = gen_muons[lead_quality_mask]
@@ -433,6 +466,16 @@ class SingleMuonProcessor(processor.ProcessorABC):
                         self.output["two_muons_cos_alpha"].fill(
                                 cat=ds_label,
                                 val=cosA
+                            )
+
+                        if is_cosmic:
+                            self.output["cosmic_isStandalone_two"].fill(
+                                cat="Upper (Exactly Two)", 
+                                val=ak.where(upper.isStandalone, 1, 0)
+                            )
+                            self.output["cosmic_isStandalone_two"].fill(
+                                cat="Lower (Exactly Two)", 
+                                val=ak.where(lower.isStandalone, 1, 0)
                             )
 
         return self.output
@@ -512,23 +555,50 @@ if __name__ == '__main__':
         #"single_muon_timeErr_CSC_only",
         #"single_muon_timeErr_DT_CSC_both",
         #"two_muons_cos_alpha",
+        "cosmic_n_dismuons",
+        "cosmic_isStandalone_all",
+        "cosmic_isStandalone_single",
+        "cosmic_isStandalone_two",
 
     ]
 
     profile_plots = [
-        "single_muon_timeErr_vs_DTHits",
-        "single_muon_timeErr_vs_CSCHits",
-        "single_muon_timeErr_vs_TotalHits"
+        #"single_muon_timeErr_vs_DTHits",
+        #"single_muon_timeErr_vs_CSCHits",
+        #"single_muon_timeErr_vs_TotalHits"
     ]
 
     for key, hist_obj in out.items():
         if isinstance(hist_obj, (int, float)): 
             continue
+
+        # Dynamically clear the signal title/filename for the cosmic-only plots
+        if key.startswith("cosmic_"):
+            current_title_mod = "(Cosmics Only - NO CUTS)"
+            current_file_mod = "Cosmics_Only_NO_CUTS"
+        else:
+            current_title_mod = TITLE_MODIFIER
+            current_file_mod = FILE_MODIFIER
   
         if key in overlay_plots:
-            save_comparison_overlay(hist_obj, key, PREFIX, OUTPUT_DIR, title_suffix=TITLE_MODIFIER, filename_suffix=FILE_MODIFIER, normalize=True)
+            # Isolate the standalone plots to apply log scale and raw counts
+            if "isStandalone" in key:
+                save_comparison_overlay(
+                    hist_obj, key, PREFIX, OUTPUT_DIR, 
+                    title_suffix=current_title_mod, 
+                    filename_suffix=current_file_mod, 
+                    normalize=False,   # Show raw counts
+                    log_y=True         # Use logarithmic y-axis so small values are visible
+                )
+            else:
+                save_comparison_overlay(
+                    hist_obj, key, PREFIX, OUTPUT_DIR, 
+                    title_suffix=current_title_mod, 
+                    filename_suffix=current_file_mod, 
+                    normalize=True,
+                    log_y=False
+                )
             
         elif key in profile_plots:
-            save_2d_profile_overlay(hist_obj, key, PREFIX, OUTPUT_DIR, title_suffix=TITLE_MODIFIER, filename_suffix=FILE_MODIFIER)
-            
+            save_2d_profile_overlay(hist_obj, key, PREFIX, OUTPUT_DIR, title_suffix=current_title_mod, filename_suffix=current_file_mod)
     print("Done!")
