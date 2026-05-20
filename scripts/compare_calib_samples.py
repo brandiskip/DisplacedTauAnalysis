@@ -124,12 +124,13 @@ def make_hists():
         "muon_eta":          Hist(cat, axis.Regular(100, -2.5, 2.5, name="val", label=r"DisMuon $\eta$")),
         "muon_phi":          Hist(cat, axis.Regular(100, -np.pi, np.pi, name="val", label=r"DisMuon $\phi$")),
         "muon_dxy":          Hist(cat, axis.Regular(100, -100, 100, name="val", label=r"DisMuon $d_{xy}$ [cm]")),
-        "muon_dz":           Hist(cat, axis.Regular(100, -300, 300, name="val", label=r"DisMuon $d_z$ [cm]")),
+        "muon_dz":           Hist(cat, axis.Regular(160, -800, 800, name="val", label=r"DisMuon $d_z$ [cm]")),
         "muon_validDTHits":  Hist(cat, axis.Regular(60,  0,    60,  name="val", label="Valid DT Hits")),
         "muon_validCSCHits": Hist(cat, axis.Regular(60,  0,    60,  name="val", label="Valid CSC Hits")),
         "muon_validHits":    Hist(cat, axis.Regular(80,  0,    80,  name="val", label="Total Valid Muon Hits")),
         "muon_dtStations":   Hist(cat, axis.Regular(10,  0,    10,  name="val", label="DT Stations with Valid Hits")),
         "muon_nDisMuons":    Hist(cat, axis.Regular(10,  0,    10,  name="val", label="Number of DisMuons per Event")),
+        "n_events_before_cuts": Hist(cat, axis.Regular(1, -0.5, 0.5, name="val", label="Event Count")),
     }
 
 
@@ -162,9 +163,11 @@ class CalibComparisonProcessor(processor.ProcessorABC):
             print(f"  WARNING: dataset {dataset!r} does not contain {LABEL_A!r} or {LABEL_B!r}")
             sample_label = dataset
 
+        self.output["n_events_before_cuts"].fill(cat=sample_label, val=np.zeros(len(events)))
+
         # Kinematic selection only
-        dismuon_mask = (events.DisMuon.pt > 20) & (abs(events.DisMuon.eta) < 2.4)
-        events["DisMuon"] = events.DisMuon[dismuon_mask]
+        #dismuon_mask = (events.DisMuon.pt > 20) & (abs(events.DisMuon.eta) < 2.4)
+        #events["DisMuon"] = events.DisMuon[dismuon_mask]
 
         # Fill multiplicity before flattening
         self.output["muon_nDisMuons"].fill(cat=sample_label, val=ak.num(events.DisMuon))
@@ -187,27 +190,39 @@ class CalibComparisonProcessor(processor.ProcessorABC):
 
 if __name__ == "__main__":
 
-    pkl_a = "samples/Summer22_CHS_collisionCalib_v19_Cosmic/Cosmic_CollisionCalib_preprocessed.pkl"
-    pkl_b = "samples/Summer22_CHS_v17_Cosmic/Cosmic_CosmicCalib_preprocessed.pkl"
+    # # ── Original pickle-based input (full samples) ──────────────────────
+    # pkl_a = "samples/Summer22_CHS_collisionCalib_v19_Cosmic/Cosmic_CollisionCalib_preprocessed.pkl"
+    # pkl_b = "samples/Summer22_CHS_v17_Cosmic/Cosmic_CosmicCalib_preprocessed.pkl"
+    #
+    # print(f"Loading {LABEL_A} from {pkl_a} ...")
+    # with open(pkl_a, "rb") as f:
+    #     runnable_a = pickle.load(f)
+    #
+    # print(f"Loading {LABEL_B} from {pkl_b} ...")
+    # with open(pkl_b, "rb") as f:
+    #     runnable_b = pickle.load(f)
+    #
+    # print(f"\nDataset keys in {LABEL_A} pkl: {list(runnable_a.keys())}")
+    # print(f"Dataset keys in {LABEL_B} pkl: {list(runnable_b.keys())}")
+    #
+    # combined = {}
+    # for key, val in runnable_a.items():
+    #     combined[f"{LABEL_A}__{key}"] = val
+    # for key, val in runnable_b.items():
+    #     combined[f"{LABEL_B}__{key}"] = val
+    #
+    # print(f"\nCombined dict has {len(combined)} dataset keys")
+    # print(f"Keys: {list(combined.keys())}")
 
-    print(f"Loading {LABEL_A} from {pkl_a} ...")
-    with open(pkl_a, "rb") as f:
-        runnable_a = pickle.load(f)
+    # ── Small-sample input (Sara's files) ─────────────────────────────────
+    base_dir = "/afs/cern.ch/user/f/fiorendi/public/displacedTaus/forBrandi/nano_cosmic"
 
-    print(f"Loading {LABEL_B} from {pkl_b} ...")
-    with open(pkl_b, "rb") as f:
-        runnable_b = pickle.load(f)
+    combined = {
+        f"{LABEL_A}__nano": [f"{base_dir}/nano_collisionCalibration.root"],
+        f"{LABEL_B}__nano": [f"{base_dir}/nano_cosmicCalibration.root"],
+    }
 
-    print(f"\nDataset keys in {LABEL_A} pkl: {list(runnable_a.keys())}")
-    print(f"Dataset keys in {LABEL_B} pkl: {list(runnable_b.keys())}")
-
-    combined = {}
-    for key, val in runnable_a.items():
-        combined[f"{LABEL_A}__{key}"] = val
-    for key, val in runnable_b.items():
-        combined[f"{LABEL_B}__{key}"] = val
-
-    print(f"\nCombined dict has {len(combined)} dataset keys")
+    print(f"Combined dict has {len(combined)} dataset keys")
     print(f"Keys: {list(combined.keys())}")
 
     print("\nRunning processor ...")
@@ -231,8 +246,13 @@ if __name__ == "__main__":
         print(f"Total entries in muon_pt: {np.sum(sample_hist.values())}")
 
     # ── Output ────────────────────────────────────────────────────────────
-    OUTPUT_DIR = "calib_comparison_plots"
+    OUTPUT_DIR = "sara_calib_comparison_plots"
     os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    print("\nEvent counts before kinematic cuts:")
+    for label in [LABEL_A, LABEL_B]:
+        h = out["n_events_before_cuts"][{"cat": label}]
+        print(f"  {label}: {int(np.sum(h.values())):,} events")
 
     overlay_vars = [
         "muon_pt",
