@@ -203,6 +203,26 @@ class SingleMuonProcessor(processor.ProcessorABC):
             "n_nobptx_2mu_pre_cosA": 0,
             "n_nobptx_2mu_post_cosA": 0,
 
+            # ── cosA COSMIC REMOVAL STUDY counters ──
+            "n_cosA_study_events_cosmic": 0,
+            "n_cosA_study_events_nobptx": 0,
+            "n_cosA_study_muons_in_cosmic": 0,
+            "n_cosA_study_muons_in_nobptx": 0,
+            "n_cosA_study_pairs_cosmic": 0,
+            "n_cosA_study_pairs_nobptx": 0,
+            "n_cosA_study_events_flagged_cosmic": 0,
+            "n_cosA_study_events_flagged_nobptx": 0,
+            "n_cosA_study_events_surviving_cosmic": 0,
+            "n_cosA_study_events_surviving_nobptx": 0,
+            "n_cosA_study_muons_surviving_cosmic": 0,
+            "n_cosA_study_muons_surviving_nobptx": 0,
+            "n_cosA_dt_study_events_surviving_cosmic": 0,
+            "n_cosA_dt_study_events_surviving_nobptx": 0,
+            "n_cosA_dt_study_events_vetoed_cosmic": 0,
+            "n_cosA_dt_study_events_vetoed_nobptx": 0,
+            "n_cosA_dt_study_muons_surviving_cosmic": 0,
+            "n_cosA_dt_study_muons_surviving_nobptx": 0,
+
             "delta_time_upper_lower": Hist(
                 axis.StrCategory([], name="cat", label="Dataset", growth=True),
                 axis.Regular(100, -60, 60, name="val", label=r"$\Delta t$ (Upper - Lower) [ns]")
@@ -302,6 +322,63 @@ class SingleMuonProcessor(processor.ProcessorABC):
                 axis.StrCategory([], name="cat", growth=True),
                 axis.Regular(24, 0, 2.4, name="val", label=r"$|\eta_{\mathrm{lower}}|$")
             ),
+
+            # ── cosA COSMIC REMOVAL STUDY histograms ──
+            "cosA_study_lead_vs_sub": Hist(
+                axis.StrCategory([], name="cat", growth=True),
+                axis.Regular(200, -1.01, 1.0, name="val", label=r"$\cos\alpha$ (Lead vs Each Sub-leading)")
+            ),
+            "cosA_study_surviving_mult": Hist(
+                axis.StrCategory([], name="cat", growth=True),
+                axis.Regular(10, 0, 10, name="val", label="Muons per Surviving Event (After cosA Veto)")
+            ),
+            "cosA_study_input_mult": Hist(
+                axis.StrCategory([], name="cat", growth=True),
+                axis.Regular(20, 0, 20, name="val", label="Muon Multiplicity Entering cosA Study")
+            ),
+            "cosA_study_surviving_dt": Hist(
+                axis.StrCategory([], name="cat", growth=True),
+                axis.Regular(100, -60, 60, name="val", label=r"$\Delta t$ (Upper - Lower) [ns]")
+            ),
+            "cosA_dt_study_surviving_dt": Hist(
+                axis.StrCategory([], name="cat", growth=True),
+                axis.Regular(100, -60, 60, name="val", label=r"$\Delta t$ (Upper - Lower) [ns] (After cosA + $\Delta t$ cuts)")
+            ),
+
+            # Investigate why some events survive cosA and Δt cuts in the MC sample
+            # ── Properties of muon pairs surviving cosA + dt cuts ──
+            "final_surv_pt": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(100, 0, 200, name="val", label=r"Muon $p_T$ [GeV]")),
+            "final_surv_eta": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(100, -2.5, 2.5, name="val", label=r"Muon $\eta$")),
+            "final_surv_phi": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(100, -np.pi, np.pi, name="val", label=r"Muon $\phi$")),
+            "final_surv_dxy": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(100, -100, 100, name="val", label=r"Muon $d_{xy}$ [cm]")),
+            "final_surv_dz": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(100, -300, 300, name="val", label=r"Muon $d_z$ [cm]")),
+            "final_surv_time": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(100, -60, 60, name="val", label="Muon Time [ns]")),
+            "final_surv_timeErr": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(60, 0, 5, name="val", label="Muon Time Error [ns]")),
+            "final_surv_timeNDof": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(50, 0, 50, name="val", label="Muon timeNDof")),
+            "final_surv_DTHits": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(60, 0, 60, name="val", label="Muon Valid DT Hits")),
+            "final_surv_CSCHits": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(60, 0, 60, name="val", label="Muon Valid CSC Hits")),
+            "final_surv_validHits": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(80, 0, 80, name="val", label="Muon Total Valid Hits")),
+            "final_surv_charge": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(3, -1.5, 1.5, name="val", label="Muon Charge")),
+            "final_surv_iso": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(100, 0, 1, name="val", label="Muon pfRelIso03_all")),
+            "final_surv_cosA": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(100, -1.0, 0.0, name="val", label=r"$\cos\alpha$ (Upper vs Lower)")),
+            "final_surv_dt": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(100, -60, 60, name="val", label=r"$\Delta t$ (Upper - Lower) [ns]")),
+            "final_surv_charge_product": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(3, -1.5, 1.5, name="val", label="Charge Product (Upper × Lower)")),
+            "final_surv_event_mult": Hist(axis.StrCategory([], name="cat", growth=True), axis.Regular(10, 0, 10, name="val", label="Total Muons in Surviving Event")),
+            "final_surv_cosA_vs_dt": Hist(
+                axis.StrCategory([], name="cat", growth=True),
+                axis.Regular(50, -1.0, 1.0, name="cosA", label=r"$\cos\alpha$"),
+                axis.Regular(50, -60, 60, name="dt", label=r"$\Delta t$ [ns]")
+            ),
+            "final_surv_upper_eta_vs_lower_eta": Hist(
+                axis.StrCategory([], name="cat", growth=True),
+                axis.Regular(50, -2.5, 2.5, name="upper", label=r"Upper $\eta$"),
+                axis.Regular(50, -2.5, 2.5, name="lower", label=r"Lower $\eta$")
+            ),
+            "final_surv_upper_pt_vs_lower_pt": Hist(
+                axis.StrCategory([], name="cat", growth=True),
+                axis.Regular(50, 0, 200, name="upper", label=r"Upper $p_T$ [GeV]"),
+                axis.Regular(50, 0, 200, name="lower", label=r"Lower $p_T$ [GeV]")
+            ),
         }
 
     def process(self, events):
@@ -375,7 +452,7 @@ class SingleMuonProcessor(processor.ProcessorABC):
         else:
             gen_muons = None
 
-        dismuon_mask = (events.DisMuon.pt > 30) & 
+        dismuon_mask = (events.DisMuon.pt > 30) & \
                         (abs(events.DisMuon.eta) < 2.4) 
         events["DisMuon"] = events.DisMuon[dismuon_mask]
 
@@ -385,7 +462,19 @@ class SingleMuonProcessor(processor.ProcessorABC):
         is_cosmic = "Cosmic" in dataset or dataset.startswith("LooseMu") or dataset == "test_cosmics_calib"
         is_nobptx = "NoBPTX" in dataset
         is_signal = not (is_cosmic or is_nobptx)
-        ds_label = "Cosmic" if is_cosmic else ("NoBPTX" if is_nobptx else "Signal")
+        ds_label = "MC" if is_cosmic else ("Data" if is_nobptx else "Signal")
+
+        # ==========================================
+        # NoBPTX: REMOVE EVENTS WITH GOOD VERTICES
+        # (removes out-of-time collisions from residual protons)
+        # ==========================================
+        if is_nobptx:
+            no_vertex_mask = (events.PV.npvsGood == 0)
+            events = events[no_vertex_mask]
+            if has_gen:
+                gen_muons = gen_muons[no_vertex_mask]
+            dis_muons = events.DisMuon
+            n_dismuons = ak.num(dis_muons)
 
         '''
         # Track the total raw events explicitly before filtering
@@ -403,8 +492,8 @@ class SingleMuonProcessor(processor.ProcessorABC):
             lead_muon = sorted_muons[:, 0]
 
             # Require ONLY the leading muon to pass cuts
-            lead_quality_mask = (lead_muon.mediumId == True) & 
-                                (lead_muon.pfRelIso03_all < 0.18) & 
+            lead_quality_mask = (lead_muon.mediumId == True) & \
+                                (lead_muon.pfRelIso03_all < 0.18) & \
                                 (abs(lead_muon.dxy) > 0.1) &
                                 (abs(lead_muon.dxy) < 10)
 
@@ -558,6 +647,261 @@ class SingleMuonProcessor(processor.ProcessorABC):
                 upper=upper_final.eta,
                 lower=lower_final.eta
             )
+
+        # ==========================================
+        # cosA COSMIC REMOVAL STUDY (>=2 MUONS, COSMIC/NOBPTX ONLY)
+        # ──────────────────────────────────────────
+        # For every event with >=2 DisMuons after duplicate removal:
+        #   0. Require timeNDof > 7 on ALL DisMuons first
+        #   1. Sort by pT, apply mediumId + iso < 0.18 to lead only
+        #   2. Compute cosA between lead and EACH sub-leading muon
+        #   3. If cosA < -0.99 for a pair -> flag BOTH lead & that
+        #      sub-leading as cosmic and remove them
+        #   4. Track how many muons are removed and how many remain
+        # No HLT trigger applied.
+        # Uses independent variables (cs_ prefix) so it does not
+        # interfere with the existing multi-muon logic below.
+        # ==========================================
+        if (is_cosmic or is_nobptx):
+            # ── Apply timeNDof > 7 to ALL DisMuons before any cosA/dt cuts ──
+            cs_all   = dis_muons[dis_muons.timeNDof > 7]
+            n_cs_all = ak.num(cs_all)
+            cs_mask  = (n_cs_all >= 2)
+
+            if ak.sum(cs_mask) > 0:
+                cs_muons = cs_all[cs_mask]
+
+                # Sort by pT descending
+                cs_sorted = cs_muons[ak.argsort(cs_muons.pt, axis=1, ascending=False)]
+                cs_lead = cs_sorted[:, 0]
+
+                # Apply mediumId + isolation to the leading muon only
+                cs_lead_pass = (
+                    (cs_lead.mediumId == True) &
+                    (cs_lead.pfRelIso03_all < 0.18)
+                )
+                cs_sorted = cs_sorted[cs_lead_pass]
+
+                prefix_cs = "cosmic" if is_cosmic else "nobptx"
+
+                if len(cs_sorted) > 0:
+                    cs_lead = cs_sorted[:, 0]
+                    cs_sub  = cs_sorted[:, 1:]   # all sub-leading muons
+
+                    self.output[f"n_cosA_study_events_{prefix_cs}"] += len(cs_sorted)
+                    self.output[f"n_cosA_study_muons_in_{prefix_cs}"] += int(ak.sum(ak.num(cs_sorted)))
+
+                    # ── cosA between lead and each sub-leading ──
+                    dot_cs = (cs_lead.px * cs_sub.px +
+                              cs_lead.py * cs_sub.py +
+                              cs_lead.pz * cs_sub.pz)
+                    denom_cs = cs_lead.p * cs_sub.p
+                    cosA_cs = ak.where(denom_cs != 0, dot_cs / denom_cs, -1000.0)
+
+                    # Fill the full cosA distribution
+                    self.output["cosA_study_lead_vs_sub"].fill(
+                        cat=ds_label, val=ak.flatten(cosA_cs)
+                    )
+
+                    # Fill input multiplicity
+                    self.output["cosA_study_input_mult"].fill(
+                        cat=ds_label, val=ak.num(cs_sorted)
+                    )
+
+                    # ── Flag entire event if ANY pair has cosA < -0.99 ──
+                    event_has_cosmic = ak.any(cosA_cs < -0.99, axis=1)
+
+                    n_pairs_checked = int(ak.sum(ak.num(cs_sub)))
+                    n_flagged_events = int(ak.sum(event_has_cosmic))
+                    n_surviving_events = int(ak.sum(~event_has_cosmic))
+
+                    self.output[f"n_cosA_study_pairs_{prefix_cs}"] += n_pairs_checked
+                    self.output[f"n_cosA_study_events_flagged_{prefix_cs}"] += n_flagged_events
+                    self.output[f"n_cosA_study_events_surviving_{prefix_cs}"] += n_surviving_events
+
+                    surviving_muons = cs_sorted[~event_has_cosmic]
+                    self.output[f"n_cosA_study_muons_surviving_{prefix_cs}"] += int(
+                        ak.sum(ak.num(surviving_muons))
+                    )
+
+                    if n_surviving_events > 0:
+                        self.output["cosA_study_surviving_mult"].fill(
+                            cat=ds_label,
+                            val=ak.num(surviving_muons)
+                        )
+
+                        # ── Delta t for surviving events: upper - lower hemisphere ──
+                        surv_upper_all = surviving_muons[surviving_muons.phi > 0]
+                        surv_lower_all = surviving_muons[surviving_muons.phi < 0]
+
+                        # Require at least one in each hemisphere
+                        surv_has_both = (ak.num(surv_upper_all) >= 1) & (ak.num(surv_lower_all) >= 1)
+
+                        if ak.sum(surv_has_both) > 0:
+                            surv_upper_both = surv_upper_all[surv_has_both]
+                            surv_lower_both = surv_lower_all[surv_has_both]
+
+                            # Pick the highest pT in each hemisphere
+                            surv_upper_sorted = surv_upper_both[ak.argsort(surv_upper_both.pt, axis=1, ascending=False)]
+                            surv_lower_sorted = surv_lower_both[ak.argsort(surv_lower_both.pt, axis=1, ascending=False)]
+
+                            surv_upper = surv_upper_sorted[:, 0]
+                            surv_lower = surv_lower_sorted[:, 0]
+
+                            surv_dt = surv_upper.timeAtIpInOut - surv_lower.timeAtIpInOut
+                            self.output["cosA_study_surviving_dt"].fill(
+                                cat=ds_label,
+                                val=surv_dt
+                            )
+
+                            # ── Apply dt cut: veto entire event if dt < -20 ──
+                            # timeNDof > 7 already required on all muons above, so
+                            # the per-leg ndof check here is redundant.
+                            dt_pass = (surv_dt >= -20)
+                            dt_fail = ~dt_pass
+
+                            self.output[f"n_cosA_dt_study_events_vetoed_{prefix_cs}"] += int(ak.sum(dt_fail))
+                            self.output[f"n_cosA_dt_study_events_surviving_{prefix_cs}"] += int(ak.sum(dt_pass))
+
+                            # Get the full surviving_muons for events that had both hemispheres
+                            surviving_both_hemi = surviving_muons[surv_has_both]
+
+                            # Keep only events passing the dt cut
+                            final_surviving = surviving_both_hemi[dt_pass]
+                            self.output[f"n_cosA_dt_study_muons_surviving_{prefix_cs}"] += int(ak.sum(ak.num(final_surviving)))
+                            '''
+                            if ak.sum(dt_pass) > 0 and is_cosmic:
+                                fs_upper = surv_upper[dt_pass]
+                                fs_lower = surv_lower[dt_pass]
+                                fs_dt = surv_dt[dt_pass]
+
+                                # Recompute cosA for the upper-lower pair
+                                fs_dot = fs_upper.px * fs_lower.px + fs_upper.py * fs_lower.py + fs_upper.pz * fs_lower.pz
+                                fs_denom = fs_upper.p * fs_lower.p
+                                fs_cosA = ak.where(fs_denom != 0, fs_dot / fs_denom, -1000.0)
+
+                                self.output["cosA_dt_study_surviving_dt"].fill(cat=ds_label, val=fs_dt)
+
+                                # Fill overlaid upper vs lower (same histogram, different category)
+                                ul = ds_label  # e.g. "MC" or "Data"
+                                self.output["final_surv_pt"].fill(cat=f"{ul} Upper", val=fs_upper.pt)
+                                self.output["final_surv_pt"].fill(cat=f"{ul} Lower", val=fs_lower.pt)
+                                self.output["final_surv_eta"].fill(cat=f"{ul} Upper", val=fs_upper.eta)
+                                self.output["final_surv_eta"].fill(cat=f"{ul} Lower", val=fs_lower.eta)
+                                self.output["final_surv_phi"].fill(cat=f"{ul} Upper", val=fs_upper.phi)
+                                self.output["final_surv_phi"].fill(cat=f"{ul} Lower", val=fs_lower.phi)
+                                self.output["final_surv_dxy"].fill(cat=f"{ul} Upper", val=fs_upper.dxy)
+                                self.output["final_surv_dxy"].fill(cat=f"{ul} Lower", val=fs_lower.dxy)
+                                self.output["final_surv_dz"].fill(cat=f"{ul} Upper", val=fs_upper.dz)
+                                self.output["final_surv_dz"].fill(cat=f"{ul} Lower", val=fs_lower.dz)
+                                self.output["final_surv_time"].fill(cat=f"{ul} Upper", val=fs_upper.timeAtIpInOut)
+                                self.output["final_surv_time"].fill(cat=f"{ul} Lower", val=fs_lower.timeAtIpInOut)
+                                self.output["final_surv_timeErr"].fill(cat=f"{ul} Upper", val=fs_upper.timeAtIpInOutErr)
+                                self.output["final_surv_timeErr"].fill(cat=f"{ul} Lower", val=fs_lower.timeAtIpInOutErr)
+                                self.output["final_surv_timeNDof"].fill(cat=f"{ul} Upper", val=fs_upper.timeNDof)
+                                self.output["final_surv_timeNDof"].fill(cat=f"{ul} Lower", val=fs_lower.timeNDof)
+                                self.output["final_surv_DTHits"].fill(cat=f"{ul} Upper", val=fs_upper.numberOfValidMuonDTHits)
+                                self.output["final_surv_DTHits"].fill(cat=f"{ul} Lower", val=fs_lower.numberOfValidMuonDTHits)
+                                self.output["final_surv_CSCHits"].fill(cat=f"{ul} Upper", val=fs_upper.numberOfValidMuonCSCHits)
+                                self.output["final_surv_CSCHits"].fill(cat=f"{ul} Lower", val=fs_lower.numberOfValidMuonCSCHits)
+                                self.output["final_surv_validHits"].fill(cat=f"{ul} Upper", val=fs_upper.numberOfValidMuonHits)
+                                self.output["final_surv_validHits"].fill(cat=f"{ul} Lower", val=fs_lower.numberOfValidMuonHits)
+                                self.output["final_surv_charge"].fill(cat=f"{ul} Upper", val=fs_upper.charge)
+                                self.output["final_surv_charge"].fill(cat=f"{ul} Lower", val=fs_lower.charge)
+                                self.output["final_surv_iso"].fill(cat=f"{ul} Upper", val=fs_upper.pfRelIso03_all)
+                                self.output["final_surv_iso"].fill(cat=f"{ul} Lower", val=fs_lower.pfRelIso03_all)
+
+                                # Per-pair quantities (no upper/lower split)
+                                self.output["final_surv_cosA"].fill(cat=ds_label, val=fs_cosA)
+                                self.output["final_surv_dt"].fill(cat=ds_label, val=fs_dt)
+                                self.output["final_surv_charge_product"].fill(cat=ds_label, val=fs_upper.charge * fs_lower.charge)
+                                self.output["final_surv_event_mult"].fill(cat=ds_label, val=ak.num(final_surviving))
+                                self.output["final_surv_cosA_vs_dt"].fill(cat=ds_label, cosA=fs_cosA, dt=fs_dt)
+                                self.output["final_surv_upper_eta_vs_lower_eta"].fill(cat=ds_label, upper=fs_upper.eta, lower=fs_lower.eta)
+                                self.output["final_surv_upper_pt_vs_lower_pt"].fill(cat=ds_label, upper=fs_upper.pt, lower=fs_lower.pt)
+                            '''
+                            
+                            # Fill dt for events surviving BOTH cuts
+                            if ak.sum(dt_pass) > 0:
+                                self.output["cosA_dt_study_surviving_dt"].fill(
+                                    cat=ds_label,
+                                    val=surv_dt[dt_pass]
+                                )
+
+                            # ── Debug: log any events surviving both cuts with >2 muons ──
+                            if ak.sum(dt_pass) > 0:
+                                final_gt2 = final_surviving[ak.num(final_surviving) > 2]
+                                if len(final_gt2) > 0:
+                                    n_upper_gt2 = ak.sum(final_gt2.phi > 0, axis=1)
+                                    n_lower_gt2 = ak.sum(final_gt2.phi < 0, axis=1)
+                                    with open("gt2_surviving_debug.txt", "a") as dbg:
+                                        dbg.write(f"[{ds_label}] Events with >2 muons surviving cosA + dt cuts: {len(final_gt2)}\n")
+                                        dbg.write(f"  Upper counts: {ak.to_list(n_upper_gt2)}\n")
+                                        dbg.write(f"  Lower counts: {ak.to_list(n_lower_gt2)}\n")
+                                        dbg.write(f"  timeAtIpInOut: {ak.to_list(final_gt2.timeAtIpInOut)}\n\n")
+                            
+                        # Also count events that had NO opposite hemisphere pair as vetoed by dt
+                        # (they can't form an upper-lower pair, so we can't compute dt)
+                        surv_no_both = surviving_muons[~surv_has_both]
+                        if len(surv_no_both) > 0:
+                            # These events survive cosA but have no upper-lower pair for dt cut
+                            # Counting them as surviving the dt cut since it doesn't apply
+                            self.output[f"n_cosA_dt_study_events_surviving_{prefix_cs}"] += len(surv_no_both)
+                            self.output[f"n_cosA_dt_study_muons_surviving_{prefix_cs}"] += int(ak.sum(ak.num(surv_no_both)))
+        '''
+        if is_signal:
+            sig_mask = (n_dismuons >= 2)
+
+            if ak.sum(sig_mask) > 0:
+                sig_muons = dis_muons[sig_mask]
+
+                # Sort by pT, apply lead-muon quality (mediumId + iso + dxy window)
+                sig_sorted = sig_muons[ak.argsort(sig_muons.pt, axis=1, ascending=False)]
+                sig_lead = sig_sorted[:, 0]
+                sig_lead_pass = (
+                    (sig_lead.mediumId == True) &
+                    (sig_lead.pfRelIso03_all < 0.18) &
+                    (abs(sig_lead.dxy) > 0.1) &
+                    (abs(sig_lead.dxy) < 10)
+                )
+                sig_sorted = sig_sorted[sig_lead_pass]
+
+                if len(sig_sorted) > 0:
+                    sig_lead = sig_sorted[:, 0]
+                    sig_sub  = sig_sorted[:, 1:]   # all sub-leading muons
+
+                    # cosA between lead and each sub-leading muon
+                    dot_sig = (sig_lead.px * sig_sub.px +
+                               sig_lead.py * sig_sub.py +
+                               sig_lead.pz * sig_sub.pz)
+                    denom_sig = sig_lead.p * sig_sub.p
+                    cosA_sig = ak.where(denom_sig != 0, dot_sig / denom_sig, -1000.0)
+
+                    # Veto entire event if ANY pair has cosA < -0.99
+                    event_has_cosmic_sig = ak.any(cosA_sig < -0.99, axis=1)
+                    surviving_sig = sig_sorted[~event_has_cosmic_sig]
+
+                    if len(surviving_sig) > 0:
+                        # Δt for surviving events: upper - lower hemisphere
+                        sig_upper_all = surviving_sig[surviving_sig.phi > 0]
+                        sig_lower_all = surviving_sig[surviving_sig.phi < 0]
+
+                        sig_has_both = (ak.num(sig_upper_all) >= 1) & (ak.num(sig_lower_all) >= 1)
+
+                        if ak.sum(sig_has_both) > 0:
+                            sig_upper_both = sig_upper_all[sig_has_both]
+                            sig_lower_both = sig_lower_all[sig_has_both]
+
+                            # Highest pT in each hemisphere
+                            sig_upper = sig_upper_both[ak.argsort(sig_upper_both.pt, axis=1, ascending=False)][:, 0]
+                            sig_lower = sig_lower_both[ak.argsort(sig_lower_both.pt, axis=1, ascending=False)][:, 0]
+
+                            sig_dt = sig_upper.timeAtIpInOut - sig_lower.timeAtIpInOut
+                            self.output["cosA_study_surviving_dt"].fill(
+                                cat=ds_label,   # "Signal"
+                                val=sig_dt
+                            )                
+        '''
         '''
         # ==========================================
         # SINGLE MUON LOGIC
@@ -673,6 +1017,7 @@ class SingleMuonProcessor(processor.ProcessorABC):
                     self.output["single_muon_timeErr_vs_DTHits"].fill(cat="Signal (Propagated)", hits=matched_muons_prop.numberOfValidMuonDTHits[sig_dt_only], err=matched_muons_prop.timeAtIpInOutErr[sig_dt_only])
                     self.output["single_muon_timeErr_vs_CSCHits"].fill(cat="Signal (Propagated)", hits=matched_muons_prop.numberOfValidMuonCSCHits[sig_csc_only], err=matched_muons_prop.timeAtIpInOutErr[sig_csc_only])
                     self.output["single_muon_timeErr_vs_TotalHits"].fill(cat="Signal (Propagated)", hits=(matched_muons_prop.numberOfValidMuonDTHits[sig_both] + matched_muons_prop.numberOfValidMuonCSCHits[sig_both]), err=matched_muons_prop.timeAtIpInOutErr[sig_both])
+        '''
         '''
         # ==========================================
         # MULTIPLE MUON LOGIC
@@ -832,6 +1177,7 @@ class SingleMuonProcessor(processor.ProcessorABC):
                             self.output["surviving_dpt"].fill(cat=ds_label, val=dpt)
                             self.output["surviving_deta"].fill(cat=ds_label, val=deta)
                             self.output["surviving_dphi"].fill(cat=ds_label, val=dphi)
+                        '''
         return self.output
 
     def postprocess(self, accumulator):
@@ -840,7 +1186,7 @@ class SingleMuonProcessor(processor.ProcessorABC):
 if __name__ == '__main__':
 
     # Load the preprocessed Cosmic pickle file
-    cosmic_pkl = "samples/Summer22_CHS_v19_Cosmic/Cosmic_preprocessed.pkl"
+    cosmic_pkl = "scripts/samples/Summer22_CHS_collisionCalib_v19_Cosmic/Cosmic_CollisionCalib_preprocessed.pkl"
     print(f"Loading preprocessed Cosmics from {cosmic_pkl}...")
     with open(cosmic_pkl, "rb") as f:
         combined_runnable = pickle.load(f)
@@ -879,79 +1225,90 @@ if __name__ == '__main__':
         processor_instance=SingleMuonProcessor(),
     )
 
-    print("\n================================================================================")
-    print(" DUPLICATE REMOVAL LOGIC (APPLIED TO EVENTS PASSING LEAD MUON CUTS)")
-    print("================================================================================")
-    print(" A track is flagged as an duplicate and deleted if:")
-    print("   1. It is a sub-leading track (Index > 0).")
-    print("   2. It has the same charge as the leading track (Index 0).")
-    print("   3. It has the following with the leading track: |dEta| < 0.01 & |dPhi| < 0.001.")
-    print("   4. It has momentum: |dPt| < 0.5 GeV.")
+    print("="*80)
+    print(" cosA COSMIC REMOVAL STUDY (>=2 MUONS, FULL EVENT VETO)")
+    print("="*80)
+    print(" For events with >=2 DisMuons after duplicate removal (Cosmic/NoBPTX only):")
+    print("   1. All DisMuons pass pT > 30 GeV, |eta| < 2.4")
+    print("   2. Sort by pT; apply mediumId + pfRelIso03_all < 0.18 to LEAD only")
+    print("   3. Compute cosA between lead and each sub-leading muon")
+    print("   4. If ANY pair has cosA < -0.99: DISCARD THE ENTIRE EVENT")
+    print("   5. Separate survivors into upper/lower hemisphere by phi (then sort by pT)")
+    print("   6. If dt (upper - lower) < -20 ns: DISCARD THE ENTIRE EVENT")
+    print("-"*80)
 
-    print("\n Total individual sub-leading duplicate TRACKS deleted:")
-    print(f"   - COSMICS MC:  {out['n_duplicates_removed_cosmic']}")
-    print(f"   - NoBPTX Data: {out['n_duplicates_removed_nobptx']}")
-    print("================================================================================\n")
+    for ds_name, prefix in [("COSMICS MC", "cosmic"), ("NoBPTX DATA", "nobptx")]:
+        n_evt     = out[f'n_cosA_study_events_{prefix}']
+        n_mu_in   = out[f'n_cosA_study_muons_in_{prefix}']
+        n_pairs   = out[f'n_cosA_study_pairs_{prefix}']
+        n_flagged = out[f'n_cosA_study_events_flagged_{prefix}']
+        n_surv    = out[f'n_cosA_study_events_surviving_{prefix}']
+        n_mu_surv = out[f'n_cosA_study_muons_surviving_{prefix}']
 
-    print("DETAILED EVENT MULTIPLICITY TRACKING")
-    print("An event only enters this table if its absolute highest-pT muon passes MediumId & Iso.")
-    print("-" * 80)
+        n_dt_vetoed  = out[f'n_cosA_dt_study_events_vetoed_{prefix}']
+        n_dt_surv    = out[f'n_cosA_dt_study_events_surviving_{prefix}']
+        n_dt_mu_surv = out[f'n_cosA_dt_study_muons_surviving_{prefix}']
 
-    datasets_to_print = [
-        ("COSMICS MC", "cosmic"),
-        ("NoBPTX DATA", "nobptx")
+        print(f"\n  {ds_name}:")
+        print(f"    Events entering study (>=2 muons, lead passes cuts): {n_evt}")
+        print(f"    Total muons entering:                                {n_mu_in}")
+        print(f"    Lead vs sub-leading pairs checked:                   {n_pairs}")
+        print(f"    ── After cosA cut (cosA < -0.99 → veto event) ──")
+        print(f"    Events vetoed by cosA:                               {n_flagged}")
+        print(f"    Events surviving cosA:                               {n_surv}")
+        if n_evt > 0:
+            print(f"    cosA survival rate: {n_surv}/{n_evt} = {(n_surv/n_evt)*100:.2f}%")
+        print(f"    Muons in cosA-surviving events:                      {n_mu_surv}")
+        print(f"    ── After dt cut (dt < -20 ns → veto event) ──")
+        print(f"    Events vetoed by dt:                                 {n_dt_vetoed}")
+        print(f"    Events surviving cosA + dt:                          {n_dt_surv}")
+        if n_evt > 0:
+            print(f"    Combined survival rate: {n_dt_surv}/{n_evt} = {(n_dt_surv/n_evt)*100:.2f}%")
+            print(f"    Combined veto rate:     {(n_flagged + n_dt_vetoed)}/{n_evt} = {((n_flagged + n_dt_vetoed)/n_evt)*100:.2f}%")
+        print(f"    Muons in final surviving events:                     {n_dt_mu_surv}")
+        if n_mu_in > 0:
+            print(f"    Final muon survival rate: {n_dt_mu_surv}/{n_mu_in} = {(n_dt_mu_surv/n_mu_in)*100:.2f}%")
+
+    print("="*80 + "\n")
+
+    # ── cosA study plots go in their own folder ──
+    COSA_OUTPUT_DIR = "cosA_study_plots"
+    os.makedirs(COSA_OUTPUT_DIR, exist_ok=True)
+
+    COSA_PREFIX = "cosA_study_"
+    COSA_TITLE = "(Cosmics MC vs NoBPTX Data)"
+    COSA_FILE = "MC_vs_Data"
+
+    cosA_overlay_plots = [
+        "cosA_study_lead_vs_sub",
+        "cosA_study_surviving_mult",
+        "cosA_study_input_mult",
+        "cosA_study_surviving_dt",
+        "cosA_dt_study_surviving_dt",
+        #"final_surv_pt",
+        #"final_surv_eta",
+        #"final_surv_phi",
+        #"final_surv_dxy",
+        #"final_surv_dz",
+        #"final_surv_time",
+        #"final_surv_timeErr",
+        #"final_surv_timeNDof",
+        #"final_surv_DTHits",
+        #"final_surv_CSCHits",
+        #"final_surv_validHits",
+        #"final_surv_charge",
+        #"final_surv_iso",
+        #"final_surv_cosA",
+        #"final_surv_dt",
+        #"final_surv_charge_product",
+        #"final_surv_event_mult",
     ]
 
-    for ds_name, prefix in datasets_to_print:
-        print(f"\n{ds_name}")
-        print(f"  {'Multiplicity':<18} | {'Pre-Cleaning':<15} | {'Post-Cleaning':<15}")
-        print("  " + "-"*55)
-
-        for m in [1, 2, 3, 4, 5, "gt5", "gt10", "gt20"]:
-            if m == "gt5":
-                label = "> 5"
-            elif m == "gt10":
-                label = "> 10"
-            elif m == "gt20":
-                label = "> 20"
-            else:
-                label = f"Exactly {m}"
-
-            pre_c = out[f"{prefix}_pre_{m}"]
-            post_c = out[f"{prefix}_post_{m}"]
-            print(f"  {label:<18} | {pre_c:<15} | {post_c:<15}")
-
-    print("\n" + "="*80)
-
-    pre_n = out['n_nobptx_2mu_pre_cosA']
-    post_n = out['n_nobptx_2mu_post_cosA']
-    if pre_n > 0:
-        print(f"  NoBPTX:  {pre_n} events pre-cut -> {post_n} survive cosA >= -0.99 ({(post_n/pre_n)*100:.2f}%)")
-    print("="*80 + "\n")
-
-    c_same = out['n_cosmic_same_hemi']
-    c_opp = out['n_cosmic_opp_hemi']
-    if (c_same + c_opp) > 0:
-        print(f"  Cosmics: {c_same + c_opp} total -> {c_same} Same Hemisphere | {c_opp} Opposite Hemisphere")
-
-    n_same = out['n_nobptx_same_hemi']
-    n_opp = out['n_nobptx_opp_hemi']
-    if (n_same + n_opp) > 0:
-        print(f"  NoBPTX:  {n_same + n_opp} total -> {n_same} Same Hemisphere | {n_opp} Opposite Hemisphere")
-
-    print("\ncos(alpha) CUT EFFICIENCY (Events with 1 Upper + 1 Lower Muon):")
-
-    pre_c = out['n_cosmic_2mu_pre_cosA']
-    post_c = out['n_cosmic_2mu_post_cosA']
-    if pre_c > 0:
-        print(f"  Cosmics: {pre_c} events pre-cut -> {post_c} survive cosA >= -0.99 ({(post_c/pre_c)*100:.2f}%)")
-
-    pre_n = out['n_nobptx_2mu_pre_cosA']
-    post_n = out['n_nobptx_2mu_post_cosA']
-    if pre_n > 0:
-        print(f"  NoBPTX:  {pre_n} events pre-cut -> {post_n} survive cosA >= -0.99 ({(post_n/pre_n)*100:.2f}%)")
-
-    print("="*80 + "\n")
+    cosA_2d_plots = [
+        #"final_surv_cosA_vs_dt",
+        #"final_surv_upper_eta_vs_lower_eta",
+        #"final_surv_upper_pt_vs_lower_pt",
+    ]
 
     OUTPUT_DIR = "single_muon_signal_vs_cosmic_plots"
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -1010,7 +1367,16 @@ if __name__ == '__main__':
         if isinstance(hist_obj, (int, float)):
             continue
 
-        if key in overlay_plots:
+        if key in cosA_overlay_plots:
+            save_comparison_overlay(hist_obj, key, COSA_PREFIX, COSA_OUTPUT_DIR,
+                                    title_suffix=COSA_TITLE, filename_suffix=COSA_FILE,
+                                    normalize=True)
+        elif key in cosA_2d_plots:
+            save_simple_2d_plot(hist_obj, key, COSA_PREFIX, COSA_OUTPUT_DIR,
+                                title_suffix=COSA_TITLE, filename_suffix=COSA_FILE,
+                                log_z=False)
+
+        elif key in overlay_plots:
             save_comparison_overlay(hist_obj, key, PREFIX, OUTPUT_DIR, title_suffix=TITLE_MODIFIER, filename_suffix=FILE_MODIFIER, normalize=True)
 
         elif key in profile_plots:
