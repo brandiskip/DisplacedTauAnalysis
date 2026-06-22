@@ -11,6 +11,12 @@ import coffea.nanoevents.methods.vector as vector
 PFNanoAODSchema.warn_missing_crossrefs = False
 PFNanoAODSchema.mixins["DisMuon"] = "Muon"
 
+def get_Lxy(genvistau):
+    """Transverse decay length: tau production vertex (= stau decay vertex)
+    minus the stau production vertex (= PV)."""
+    vx = genvistau.parent.vx - genvistau.parent.distinctParent.vx
+    vy = genvistau.parent.vy - genvistau.parent.distinctParent.vy
+    return np.sqrt(vx ** 2 + vy ** 2)
 
 def plot_cosA_efficiency(h_all, h_post, OUTPUT_DIR, PREFIX, title_suffix, filename_suffix):
     if np.sum(h_all.values()) == 0:
@@ -48,6 +54,28 @@ def plot_cosA_efficiency(h_all, h_post, OUTPUT_DIR, PREFIX, title_suffix, filena
     plt.close(fig)
     print(f"    Saved efficiency plot: {outpath}")
 
+
+def plot_muon_types(n_standalone, n_global, n_tracker, OUTPUT_DIR, PREFIX, title_suffix, filename_suffix):
+    counts = [n_standalone, n_global, n_tracker]
+    labels = ["Standalone", "Global", "Tracker"]
+    if sum(counts) == 0:
+        print("Skipping muon-type plot (empty)")
+        return
+    fig, ax = plt.subplots(figsize=(8, 6))
+    x = np.arange(len(labels))
+    bars = ax.bar(x, counts, width=0.6, color=["#4C72B0", "#DD8452", "#55A868"])
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_ylabel("DisMuons")
+    ax.set_xlabel("Muon type (categories overlap)")
+    ax.set_title("DisMuon types — signal selection " + title_suffix)
+    for b, c in zip(bars, counts):
+        ax.text(b.get_x() + b.get_width() / 2, b.get_height(), f"{c}", ha="center", va="bottom")
+    outpath = os.path.join(OUTPUT_DIR, f"{PREFIX}muon_types_{filename_suffix}.pdf")
+    fig.savefig(outpath, bbox_inches="tight")
+    plt.close(fig)
+    print(f"    Saved muon-type plot: {outpath}")
+
 def plot_timeNDof(h, OUTPUT_DIR, PREFIX, title_suffix, filename_suffix):
     if np.sum(h.values()) == 0:
         print("Skipping timeNDof plot (empty)")
@@ -75,16 +103,22 @@ class CosASignalCheckProcessor(processor.ProcessorABC):
             "n_events_2plus_muons": 0,
             "n_events_vetoed_cosA": 0,
             "n_events_vetoed_dt": 0,
-            # ── Duplicate-removal counters ──
             "n_events_multi_dimuon_predup": 0,
             "n_events_multi_dimuon_postdup": 0,
-            # Total duplicate tracks removed (before any cosA / dt cut)
             "n_duplicate_tracks_removed": 0,
             "n_signal_numer_dd": 0,
             "n_signal_numer_cosA_dt_dd": 0,
             "n_events_2plus_muons_dd": 0,
             "n_events_vetoed_cosA_dd": 0,
             "n_events_vetoed_dt_dd": 0,
+            "n_dismuons_allcut": 0,
+            "n_dismuons_leadcut": 0,
+            "n_events_1plus_allcut": 0,
+            "n_events_1plus_leadcut": 0,
+            "n_mu_standalone": 0,
+            "n_mu_global":     0,
+            "n_mu_tracker":    0,
+
             "lead_pt_all": Hist(
                 axis.Regular(50, 0, 500, name="val", label=r"Leading DisMuon $p_T$ [GeV]")
             ),
@@ -120,7 +154,57 @@ class CosASignalCheckProcessor(processor.ProcessorABC):
         if not (is_signal and has_gen):
             return self.output
 
-        # ── Rebuild DisMuon as Lorentz vectors ──
+        # ════════════════════════════════════════════════════════════
+        # GEN-LEVEL SIGNAL REGION (applied BEFORE any DisMuon cuts):
+        #   exactly 1 GenVisStauTau, exactly 1 GenMuon, 0 GenElectrons
+        # ════════════════════════════════════════════════════════════
+        gpart = events.GenPart
+        events['staus'] = gpart[(abs(gpart.pdgId) == 1000015) & gpart.hasFlags("isLastCopy")]
+        events['staus_taus'] = events.staus.distinctChildren[
+            (abs(events.staus.distinctChildren.pdgId) == 15) &
+            events.staus.distinctChildren.hasFlags("isLastCopy") &
+            events.staus.distinctChildren.hasFlags("fromHardProcess")
+        ]
+
+        genvistau_Lxy = get_Lxy(events.GenVisTau)
+        events['GenVisStauTaus'] = events.GenVisTau[
+            (abs(events.GenVisTau.parent.pdgId) == 15) &
+            (abs(events.GenVisTau.parent.distinctParent.pdgId) == 1000015) &
+            events.GenVisTau.parent.distinctParent.hasFlags("isLastCopy") &
+            events.GenVisTau.parent.hasFlags("fromHardProcess") &
+            (genvistau_Lxy < 100.0) &
+            (events.GenVisTau.pt > 20) &
+            (abs(events.GenVisTau.eta) < 2.4)
+        ]
+        d0 = abs(
+            (events.GenVisStauTaus.parent.vy - events.GenVtx.y) * np.cos(events.GenVisStauTaus.parent.phi) -
+            (events.GenVisStauTaus.parent.vx - events.GenVtx.x) * np.sin(events.GenVisStauTaus.parent.phi)
+        )
+        events['GenVisStauTaus'] = ak.with_field(events.GenVisStauTaus, d0, where="d0")
+
+        events['GenMuon'] = gpart[(abs(gpart.pdgId) == 13) & gpart.hasFlags("isLastCopy")]
+        events['GenMuon'] = events.GenMuon[
+            (events.GenMuon.pt > 20) &
+            (abs(events.GenMuon.eta) < 2.4) &
+            (abs(events.GenMuon.distinctParent.distinctParent.pdgId) == 1000015)
+        ]
+
+        events['GenElectron'] = events.GenPart[(abs(events.GenPart.pdgId) == 11) & events.GenPart.hasFlags("isLastCopy")]
+        events['GenElectron'] = events.GenElectron[
+            (events.GenElectron.pt > 20) &
+            (abs(events.GenElectron.eta) < 2.4) &
+            (abs(events.GenElectron.distinctParent.distinctParent.pdgId) == 1000015)
+        ]
+
+        gen_mask = (
+            (ak.num(events.GenVisStauTaus) == 1) &
+            (ak.num(events.GenMuon) == 1) &
+            (ak.num(events.GenElectron) == 0)
+        )
+        events = events[gen_mask]
+        if len(events) == 0:
+            return self.output
+
         events["DisMuon"] = ak.zip(
             {
                 "pt":                       events.DisMuon.pt,
@@ -141,36 +225,35 @@ class CosASignalCheckProcessor(processor.ProcessorABC):
                 "timeAtIpInOutErr":         events.DisMuon.timeAtIpInOutErr,
                 "mediumId":                 events.DisMuon.mediumId,
                 "pfRelIso03_all":           events.DisMuon.pfRelIso03_all,
-                "eta_at_mb2":               events.DisMuon.eta_at_mb2,
-                "phi_at_mb2":               events.DisMuon.phi_at_mb2,
+                "isStandalone":             events.DisMuon.isStandalone,
+                "isGlobal":                 events.DisMuon.isGlobal,
+                "isTracker":                events.DisMuon.isTracker,
             },
             with_name="PtEtaPhiMLorentzVector",
             behavior=vector.behavior,
         )
-
-        # ── GenPart ──
-        events["GenPart"] = ak.zip(
-            {
-                "pt":         events.GenPart.pt,
-                "eta":        events.GenPart.eta,
-                "phi":        events.GenPart.phi,
-                "mass":       events.GenPart.mass,
-                "pdgId":      events.GenPart.pdgId,
-                "status":     events.GenPart.status,
-                "eta_at_mb2": events.GenPart.eta_at_mb2,
-                "phi_at_mb2": events.GenPart.phi_at_mb2,
-            },
-            with_name="PtEtaPhiMLorentzVector",
-            behavior=vector.behavior,
-        )
-        gen_muons = events.GenPart[
-            (abs(events.GenPart.pdgId) == 13) & (events.GenPart.status == 1)
-        ]
-        gen_muons = gen_muons[(gen_muons.pt > 30) & (abs(gen_muons.eta) < 2.4)]
 
         # ── Kinematic cuts on DisMuons ──
-        dismuon_mask = (events.DisMuon.pt > 30) & (abs(events.DisMuon.eta) < 2.4)
-        events["DisMuon"] = events.DisMuon[dismuon_mask]
+        # OLD selection (pt/eta cut on ALL DisMuons) — evaluated only for counting
+        dismuon_mask_all = (events.DisMuon.pt > 30) & (abs(events.DisMuon.eta) < 2.4)
+        self.output["n_dismuons_allcut"]     += int(ak.sum(dismuon_mask_all))
+        self.output["n_events_1plus_allcut"] += int(ak.sum(ak.any(dismuon_mask_all, axis=1)))
+
+        # NEW selection: apply the pt/eta cut to the LEADING (highest-pT)
+        # DisMuon only; sub-leading muons are kept with no pt/eta requirement.
+        # Events whose leading muon fails lose their whole DisMuon collection,
+        # so the ">= 1 DisMuon" requirement below removes them.
+        sorted_all  = events.DisMuon[ak.argsort(events.DisMuon.pt, axis=1, ascending=False)]
+        lead_all    = ak.firsts(sorted_all)   # None for events with 0 DisMuons
+        lead_passes = ak.fill_none(
+            (lead_all.pt > 30) & (abs(lead_all.eta) < 2.4), False
+        )
+
+        keep_per_muon, _ = ak.broadcast_arrays(lead_passes, sorted_all.pt)
+        events["DisMuon"] = sorted_all[keep_per_muon]
+
+        self.output["n_dismuons_leadcut"]     += int(ak.sum(ak.num(events.DisMuon)))
+        self.output["n_events_1plus_leadcut"] += int(ak.sum(lead_passes))
 
         # ── Signal-only event filtering ──
         charged_sel = events.Jet.constituents.pf.charge != 0
@@ -201,10 +284,9 @@ class CosASignalCheckProcessor(processor.ProcessorABC):
         ]
 
         good_MET    = events.PFMET.pt > 105
-        signal_mask = (ak.num(gen_muons) == 1) & (ak.num(jets) == 1) & good_MET
+        signal_mask = (ak.num(jets) == 1) & good_MET
 
         events    = events[signal_mask]
-        gen_muons = gen_muons[signal_mask]
 
         # ── Require at least 1 DisMuon ──
         mask_has_muons = ak.num(events.DisMuon) > 0
@@ -212,7 +294,6 @@ class CosASignalCheckProcessor(processor.ProcessorABC):
             return self.output
 
         events    = events[mask_has_muons]
-        gen_muons = gen_muons[mask_has_muons]
 
         # ── Sort by pT, apply quality cuts to the leading muon only ──
         sorted_muons = events.DisMuon[
@@ -242,6 +323,9 @@ class CosASignalCheckProcessor(processor.ProcessorABC):
         self.output["n_signal_denom"] += len(sorted_muons)
         self.output["lead_pt_all"].fill(val=lead.pt)
         self.output["timeNDof_all"].fill(val=ak.to_numpy(ak.flatten(sorted_muons.timeNDof)))
+        self.output["n_mu_standalone"] += int(ak.sum(ak.flatten(sorted_muons.isStandalone)))
+        self.output["n_mu_global"]     += int(ak.sum(ak.flatten(sorted_muons.isGlobal)))
+        self.output["n_mu_tracker"]    += int(ak.sum(ak.flatten(sorted_muons.isTracker)))
 
         # ╔══════════════════════════════════════════════════════════╗
         # ║  DUPLICATE TRACK REMOVAL — applied BEFORE the cosA / dt   ║
@@ -535,6 +619,12 @@ if __name__ == "__main__":
         print()
         print(f"    Signal events saved from veto by removing duplicates  —  "
               f"cosA: {numer_cosA_dd - numer_cosA}   cosA + dt: {numer_both_dd - numer_both}")
+
+        print()
+        print("  pt/eta cut comparison (cut on ALL muons vs LEADING muon only):")
+        print(f"    {'':30}{'all muons':>12}{'leading only':>14}")
+        print(f"    {'Total DisMuons kept':30}{out['n_dismuons_allcut']:>12}{out['n_dismuons_leadcut']:>14}")
+        print(f"    {'Events with >=1 DisMuon':30}{out['n_events_1plus_allcut']:>12}{out['n_events_1plus_leadcut']:>14}")
         print("=" * 60 + "\n")
 
         # Plot cosA-only efficiency
@@ -575,6 +665,19 @@ if __name__ == "__main__":
 
         plot_timeNDof(
             out["timeNDof_all"],
+            OUTPUT_DIR, PREFIX,
+            title_suffix=title_suffix,
+            filename_suffix=basename,
+        )
+
+        print(f"  Muon types (signal selection):  "
+              f"Standalone={out['n_mu_standalone']}  "
+              f"Global={out['n_mu_global']}  Tracker={out['n_mu_tracker']}")
+
+        plot_muon_types(
+            out["n_mu_standalone"],
+            out["n_mu_global"],
+            out["n_mu_tracker"],
             OUTPUT_DIR, PREFIX,
             title_suffix=title_suffix,
             filename_suffix=basename,
