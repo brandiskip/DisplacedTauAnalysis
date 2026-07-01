@@ -13,6 +13,47 @@ from coffea.dataset_tools import preprocess
 PFNanoAODSchema.warn_missing_crossrefs = False
 PFNanoAODSchema.mixins["DisMuon"] = "Muon"
 
+def get_Lxy(genvistau):
+    """Transverse decay length: tau production vertex (= stau decay vertex)
+    minus the stau production vertex (= PV)."""
+    vx = genvistau.parent.vx - genvistau.parent.distinctParent.vx
+    vy = genvistau.parent.vy - genvistau.parent.distinctParent.vy
+    return np.sqrt(vx ** 2 + vy ** 2)
+
+def save_muon_type_counts(h, var_name, PREFIX, OUTPUT_DIR, title_suffix="", filename_suffix=""):
+    """Grouped bar chart of Standalone / Global / Tracker DisMuon counts.
+    One bar group per dataset category.  Categories OVERLAP — a muon can be
+    several types, so it is counted once in each bin it satisfies."""
+    if np.sum(h.values()) == 0:
+        print(f"Skipping {var_name} (Empty)")
+        return
+
+    labels = ["Standalone", "Global", "Tracker"]
+    cats = list(h.axes["cat"])
+    x = np.arange(len(labels))
+    width = 0.8 / max(len(cats), 1)
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    for i, cat in enumerate(cats):
+        counts = h[{"cat": cat}].values()
+        offset = (i - (len(cats) - 1) / 2.0) * width
+        bars = ax.bar(x + offset, counts, width=width, label=cat)
+        for b, c in zip(bars, counts):
+            ax.text(b.get_x() + b.get_width() / 2, b.get_height(), f"{int(c)}",
+                    ha="center", va="bottom", fontsize=8)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_ylabel("DisMuons")
+    ax.set_xlabel("Muon type (categories overlap)")
+    ax.set_title(f"DisMuon types {title_suffix}")
+    ax.legend(title="Dataset")
+
+    outpath = os.path.join(OUTPUT_DIR, f"{PREFIX}{var_name}_{filename_suffix}.pdf")
+    fig.savefig(outpath, bbox_inches="tight")
+    plt.close(fig)
+    print(f"    Saved muon-type plot to: {outpath}")
+
 def save_comparison_overlay(h, var_name, PREFIX, OUTPUT_DIR, title_suffix="", filename_suffix="", log_y=False, normalize=True):
     import numpy as np
 
@@ -223,6 +264,12 @@ class SingleMuonProcessor(processor.ProcessorABC):
             "n_cosA_dt_study_muons_surviving_cosmic": 0,
             "n_cosA_dt_study_muons_surviving_nobptx": 0,
 
+            # ── Standalone / Global / Tracker muon counts (categories overlap) ──
+            "muon_type": Hist(
+                axis.StrCategory([], name="cat", label="Dataset", growth=True),
+                axis.IntCategory([0, 1, 2], name="type", label="Muon Type"),
+            ),
+
             "delta_time_upper_lower": Hist(
                 axis.StrCategory([], name="cat", label="Dataset", growth=True),
                 axis.Regular(100, -60, 60, name="val", label=r"$\Delta t$ (Upper - Lower) [ns]")
@@ -395,6 +442,7 @@ class SingleMuonProcessor(processor.ProcessorABC):
                 "timeNDof": events.DisMuon.timeNDof,
                 "isStandalone": events.DisMuon.isStandalone,
                 "isGlobal": events.DisMuon.isGlobal,
+                "isTracker": events.DisMuon.isTracker,
                 "dxy": events.DisMuon.dxy,
                 "dz": events.DisMuon.dz,
                 "numberOfValidMuonDTHits": events.DisMuon.numberOfValidMuonDTHits,
@@ -412,8 +460,68 @@ class SingleMuonProcessor(processor.ProcessorABC):
             behavior=vector.behavior,
         )
 
+        # ── Dataset classification (moved up so the gen-level signal region
+        #    can be evaluated on the NATIVE GenPart before it is rebuilt as a
+        #    Lorentz vector below) ──
+        is_cosmic = "Cosmic" in dataset or dataset.startswith("LooseMu") or dataset == "test_cosmics_calib"
+        is_nobptx = "NoBPTX" in dataset
+        is_signal = not (is_cosmic or is_nobptx)
+        ds_label = "MC" if is_cosmic else ("Data" if is_nobptx else "Signal")
+
         # Ensure we do not crash when searching for GenPart in data
         has_gen = "GenPart" in events.fields
+
+        # ════════════════════════════════════════════════════════════
+        # GEN-LEVEL SIGNAL REGION (signal samples only): exactly 1
+        # GenVisStauTau, exactly 1 GenMuon, 0 GenElectrons.  Computed on the
+        # NATIVE GenPart (needs hasFlags / distinctParent / GenVisTau / GenVtx)
+        # BEFORE GenPart is rebuilt as a plain Lorentz vector below.  Cosmic MC
+        # has no staus, so this is deliberately NOT applied to the cosmic path.
+        # ════════════════════════════════════════════════════════════
+        if is_signal and has_gen:
+            gpart = events.GenPart
+            events['staus'] = gpart[(abs(gpart.pdgId) == 1000015) & gpart.hasFlags("isLastCopy")]
+            events['staus_taus'] = events.staus.distinctChildren[
+                (abs(events.staus.distinctChildren.pdgId) == 15) &
+                events.staus.distinctChildren.hasFlags("isLastCopy") &
+                events.staus.distinctChildren.hasFlags("fromHardProcess")
+            ]
+
+            genvistau_Lxy = get_Lxy(events.GenVisTau)
+            events['GenVisStauTaus'] = events.GenVisTau[
+                (abs(events.GenVisTau.parent.pdgId) == 15) &
+                (abs(events.GenVisTau.parent.distinctParent.pdgId) == 1000015) &
+                events.GenVisTau.parent.distinctParent.hasFlags("isLastCopy") &
+                events.GenVisTau.parent.hasFlags("fromHardProcess") &
+                (genvistau_Lxy < 100.0) &
+                (events.GenVisTau.pt > 20) &
+                (abs(events.GenVisTau.eta) < 2.4)
+            ]
+            d0 = abs(
+                (events.GenVisStauTaus.parent.vy - events.GenVtx.y) * np.cos(events.GenVisStauTaus.parent.phi) -
+                (events.GenVisStauTaus.parent.vx - events.GenVtx.x) * np.sin(events.GenVisStauTaus.parent.phi)
+            )
+            events['GenVisStauTaus'] = ak.with_field(events.GenVisStauTaus, d0, where="d0")
+
+            events['GenMuon'] = gpart[(abs(gpart.pdgId) == 13) & gpart.hasFlags("isLastCopy")]
+            events['GenMuon'] = events.GenMuon[
+                (events.GenMuon.pt > 20) &
+                (abs(events.GenMuon.eta) < 2.4) &
+                (abs(events.GenMuon.distinctParent.distinctParent.pdgId) == 1000015)
+            ]
+
+            events['GenElectron'] = events.GenPart[(abs(events.GenPart.pdgId) == 11) & events.GenPart.hasFlags("isLastCopy")]
+            events['GenElectron'] = events.GenElectron[
+                (events.GenElectron.pt > 20) &
+                (abs(events.GenElectron.eta) < 2.4) &
+                (abs(events.GenElectron.distinctParent.distinctParent.pdgId) == 1000015)
+            ]
+
+            signal_gen_mask = (
+                (ak.num(events.GenVisStauTaus) == 1) &
+                (ak.num(events.GenMuon) == 1) &
+                (ak.num(events.GenElectron) == 0)
+            )
 
         if has_gen:
             genpart_dict = {
@@ -452,17 +560,20 @@ class SingleMuonProcessor(processor.ProcessorABC):
         else:
             gen_muons = None
 
-        dismuon_mask = (events.DisMuon.pt > 30) & \
-                        (abs(events.DisMuon.eta) < 2.4) 
-        events["DisMuon"] = events.DisMuon[dismuon_mask]
+        # ── Apply pt/eta to the LEADING (highest-pT) DisMuon only (all datasets:
+        #    cosmic, signal, and NoBPTX data).  Sub-leading muons are kept with
+        #    no pt/eta requirement; events whose leading muon fails lose their
+        #    whole DisMuon collection and are dropped by the >=1 muon cut below.
+        sorted_all_kin = events.DisMuon[ak.argsort(events.DisMuon.pt, axis=1, ascending=False)]
+        lead_all_kin = ak.firsts(sorted_all_kin)
+        lead_passes_kin = ak.fill_none(
+            (lead_all_kin.pt > 30) & (abs(lead_all_kin.eta) < 2.4), False
+        )
+        keep_per_muon_kin, _ = ak.broadcast_arrays(lead_passes_kin, sorted_all_kin.pt)
+        events["DisMuon"] = sorted_all_kin[keep_per_muon_kin]
 
         dis_muons = events.DisMuon
         n_dismuons = ak.num(dis_muons)
-
-        is_cosmic = "Cosmic" in dataset or dataset.startswith("LooseMu") or dataset == "test_cosmics_calib"
-        is_nobptx = "NoBPTX" in dataset
-        is_signal = not (is_cosmic or is_nobptx)
-        ds_label = "MC" if is_cosmic else ("Data" if is_nobptx else "Signal")
 
         # ==========================================
         # NoBPTX: REMOVE EVENTS WITH GOOD VERTICES
@@ -568,8 +679,9 @@ class SingleMuonProcessor(processor.ProcessorABC):
 
             good_MET = (events.PFMET.pt > 105)
 
-            # Require exactly one GenMuon and exactly one Reco Jet (post-kinematic cuts)
-            signal_mask = (ak.num(gen_muons) == 1) & (ak.num(jets) == 1) & good_MET
+            # Require the gen-level signal region (1 GenVisStauTau, 1 GenMuon,
+            # 0 GenElectron) and exactly one Reco Jet (post-kinematic cuts) + MET
+            signal_mask = signal_gen_mask & (ak.num(jets) == 1) & good_MET
 
             # Apply mask strictly to the signal events
             events = events[signal_mask]
@@ -593,7 +705,13 @@ class SingleMuonProcessor(processor.ProcessorABC):
             sorted_all = dis_muons[ak.argsort(dis_muons.pt, axis=1, ascending=False)]
             lead_all = sorted_all[:, 0]
 
+            # mediumId + isolation on the LEADING muon for all datasets (as before).
             lead_quality_mask_g = (lead_all.mediumId == True) & (lead_all.pfRelIso03_all < 0.18)
+            # The dxy displacement window is a SIGNAL-region cut.  Cosmic / beam-halo
+            # muons are mostly non-prompt with |dxy| outside [0.1, 10] cm (often
+            # > 10 cm), so applying it to cosmic/NoBPTX removes nearly all of them.
+            if is_signal:
+                lead_quality_mask_g = lead_quality_mask_g & (abs(lead_all.dxy) > 0.1) & (abs(lead_all.dxy) < 10)
             events = events[lead_quality_mask_g]
             if has_gen:
                 gen_muons = gen_muons[lead_quality_mask_g]
@@ -618,6 +736,20 @@ class SingleMuonProcessor(processor.ProcessorABC):
                 dis_muons = sorted_all[~is_duplicate_g]
 
         n_dismuons = ak.num(dis_muons)
+
+        # ── Standalone / Global / Tracker counts for the selected DisMuons.
+        #    Categories OVERLAP — a muon can be more than one type, so it is
+        #    counted once in each bin it satisfies. ──
+        if ak.sum(n_dismuons) > 0:
+            self.output["muon_type"].fill(
+                cat=ds_label,
+                type=[0, 1, 2],
+                weight=[
+                    int(ak.sum(ak.flatten(dis_muons.isStandalone))),
+                    int(ak.sum(ak.flatten(dis_muons.isGlobal))),
+                    int(ak.sum(ak.flatten(dis_muons.isTracker))),
+                ],
+            )
 
         # ==========================================
         # EXACTLY TWO MUONS (UNCUT) LOGIC
@@ -848,7 +980,7 @@ class SingleMuonProcessor(processor.ProcessorABC):
                             # Counting them as surviving the dt cut since it doesn't apply
                             self.output[f"n_cosA_dt_study_events_surviving_{prefix_cs}"] += len(surv_no_both)
                             self.output[f"n_cosA_dt_study_muons_surviving_{prefix_cs}"] += int(ak.sum(ak.num(surv_no_both)))
-        '''
+        
         if is_signal:
             sig_mask = (n_dismuons >= 2)
 
@@ -896,12 +1028,15 @@ class SingleMuonProcessor(processor.ProcessorABC):
                             sig_upper = sig_upper_both[ak.argsort(sig_upper_both.pt, axis=1, ascending=False)][:, 0]
                             sig_lower = sig_lower_both[ak.argsort(sig_lower_both.pt, axis=1, ascending=False)][:, 0]
 
+                            # Require timeNDof > 7 ONLY on the two muons that enter the
+                            # dt cut (the upper/lower hemisphere leaders), not on all muons.
+                            sig_ndof_ok = (sig_upper.timeNDof > 7) & (sig_lower.timeNDof > 7)
+
                             sig_dt = sig_upper.timeAtIpInOut - sig_lower.timeAtIpInOut
                             self.output["cosA_study_surviving_dt"].fill(
                                 cat=ds_label,   # "Signal"
-                                val=sig_dt
+                                val=sig_dt[sig_ndof_ok]
                             )                
-        '''
         '''
         # ==========================================
         # SINGLE MUON LOGIC
@@ -1201,7 +1336,7 @@ if __name__ == '__main__':
     combined_runnable.update(nobptx_runnable)
 
     # --- ADDED BACK SIGNAL LOAD ---
-    signal_pkl = "samples/Signal/Stau_300_100mm_preprocessed.pkl"
+    signal_pkl = "samples/Signal_Samples/Stau_300_100mm_preprocessed.pkl"
     print(f"Loading preprocessed Signal from {signal_pkl}...")
     with open(signal_pkl, "rb") as f:
         signal_runnable = pickle.load(f)
@@ -1280,9 +1415,9 @@ if __name__ == '__main__':
     COSA_FILE = "MC_vs_Data"
 
     cosA_overlay_plots = [
-        "cosA_study_lead_vs_sub",
-        "cosA_study_surviving_mult",
-        "cosA_study_input_mult",
+        #"cosA_study_lead_vs_sub",
+        #"cosA_study_surviving_mult",
+        #"cosA_study_input_mult",
         "cosA_study_surviving_dt",
         "cosA_dt_study_surviving_dt",
         #"final_surv_pt",
@@ -1384,6 +1519,12 @@ if __name__ == '__main__':
 
         elif key in simple_2d_plots:
             save_simple_2d_plot(hist_obj, key, PREFIX, OUTPUT_DIR, title_suffix=TITLE_MODIFIER, filename_suffix=FILE_MODIFIER, log_z=True)
+
+    # ── Standalone / Global / Tracker muon counts (Cosmic / Data / Signal) ──
+    save_muon_type_counts(
+        out["muon_type"], "muon_type", PREFIX, OUTPUT_DIR,
+        title_suffix=TITLE_MODIFIER, filename_suffix=FILE_MODIFIER
+    )
     '''
     plot_cosA_efficiency_vs_eta(
         out["eta_lower_pre_cosA"], out["eta_lower_post_cosA"],
