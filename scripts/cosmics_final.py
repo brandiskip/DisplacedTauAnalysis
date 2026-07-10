@@ -93,6 +93,46 @@ def save_comparison_overlay(h, var_name, PREFIX, OUTPUT_DIR, title_suffix="", fi
     plt.close(fig)
     print(f"    Saved comparison plot to: {outpath}")
 
+def save_time_overlay(h, sel, PREFIX, OUTPUT_DIR, title_suffix="", normalize=True):
+    if sel not in list(h.axes["sel"]):
+        print(f"Skipping time plot {sel} (category never filled)")
+        return
+    h_sel = h[{"sel": sel}]
+    if np.sum(h_sel.values()) == 0:
+        print(f"Skipping time plot {sel} (Empty)")
+        return
+
+    edges = h_sel.axes["val"].edges
+    centers = 0.5 * (edges[:-1] + edges[1:])
+    in_window = (centers > -45) & (centers < 20)
+
+    fig, ax = plt.subplots(figsize=(9, 6))
+    for label in h_sel.axes["cat"]:
+        vals = h_sel[{"cat": label}].values()
+        tot = vals.sum()
+        if tot == 0:
+            continue
+        frac_in = vals[in_window].sum() / tot
+        if normalize:
+            vals = vals / tot
+        ax.step(edges[:-1], vals, where="post",
+                label=f"{label} (n={int(tot)}, {100*frac_in:.1f}% in window)")
+
+    ax.set_yscale("log")
+    for t in (-50, -25, 25, 50):
+        ax.axvline(t, color="gray", ls=":", alpha=0.6)
+    ax.axvspan(-45, 20, color="green", alpha=0.10, label="inTimeMuon keeps (~ -45 to +20 ns)")
+    ax.axvline(-45, color="green", ls="--", alpha=0.8)
+    ax.axvline(+20, color="green", ls="--", alpha=0.8)
+    ax.set_xlabel(h_sel.axes["val"].label)
+    ax.set_ylabel("Fraction of DisMuons / (2 ns)" if normalize else "DisMuons / (2 ns)")
+    ax.set_title(f"timeAtIpInOut — {sel} {title_suffix}")
+    ax.legend()
+
+    outpath = os.path.join(OUTPUT_DIR, f"{PREFIX}time_{sel}.pdf")
+    fig.savefig(outpath, bbox_inches="tight")
+    plt.close(fig)
+    print(f"    Saved time plot: {outpath}")
 
 class SingleMuonProcessor(processor.ProcessorABC):
     def __init__(self):
@@ -115,6 +155,13 @@ class SingleMuonProcessor(processor.ProcessorABC):
             "n_dup_removed_outer_nobptx": 0,
             "n_dup_removed_seg_nobptx": 0,
             "n_dup_pairs_surviving_nobptx": 0,
+
+            # ── per-pair dump: duplicate pairs that SURVIVE the outertrack + segment
+            #    cosA<-0.8 cuts (still flagged as duplicates). Written to a .txt at the
+            #    end so we can inspect run/lumi/event + kinematics and see why they
+            #    still look like duplicates. One row per surviving duplicate pair. ──
+            "dup_surv_rows_cosmic": [],
+            "dup_surv_rows_nobptx": [],
 
             # ── single-muon events: pass lead kinematics + quality but have exactly 1
             #    DisMuon, so they never enter the dup/cosA/dt cutflow ──
@@ -163,6 +210,11 @@ class SingleMuonProcessor(processor.ProcessorABC):
             "cosA_dt_study_surviving_dt": Hist(
                 axis.StrCategory([], name="cat", growth=True),
                 axis.Regular(100, -60, 60, name="val", label=r"$\Delta t$ (Upper - Lower) [ns] (After cosA + $\Delta t$ cuts)")
+            ),
+            "time_at_ip": Hist(
+                axis.StrCategory([], name="cat", label="Dataset", growth=True),
+                axis.StrCategory([], name="sel", label="Selection", growth=True),
+                axis.Regular(300, -300, 300, name="val", label=r"DisMuon timeAtIpInOut [ns]"),
             ),
         }
 
@@ -225,6 +277,32 @@ class SingleMuonProcessor(processor.ProcessorABC):
             with_name="PtEtaPhiMLorentzVector",
             behavior=vector.behavior,
         )
+
+        # ── RAW timing study: ALL DisMuons, NO requirements on the lead muon
+        #    (cosmic MC + NoBPTX). Same split as the main timing study — single-muon
+        #    events, and >=2-mu events divided into upper (phi>0) / lower (phi<0) —
+        #    but WITHOUT the lead pt/eta/quality selection. NoBPTX keeps only its
+        #    npvsGood==0 sample definition; nothing here touches the lead muon.
+        #    (Per request, the veto-surviving "passes the cuts" case is skipped.) ──
+        if is_cosmic or is_nobptx:
+            raw_ev = events[events.PV.npvsGood == 0] if is_nobptx else events
+            raw_mu = raw_ev.DisMuon
+            n_raw  = ak.num(raw_mu)
+
+            self.output["time_at_ip"].fill(
+                cat=ds_label, sel="1mu_nolead",
+                val=ak.flatten(raw_mu[n_raw == 1].timeAtIpInOut))
+
+            raw2 = raw_mu[n_raw >= 2]
+            self.output["time_at_ip"].fill(
+                cat=ds_label, sel="2mu_all_nolead",
+                val=ak.flatten(raw2.timeAtIpInOut))
+            self.output["time_at_ip"].fill(
+                cat=ds_label, sel="2mu_upper_nolead",
+                val=ak.flatten(raw2[raw2.phi > 0].timeAtIpInOut))
+            self.output["time_at_ip"].fill(
+                cat=ds_label, sel="2mu_lower_nolead",
+                val=ak.flatten(raw2[raw2.phi < 0].timeAtIpInOut))        
 
         # ════════════════════════════════════════════════════════════
         # GEN-LEVEL SIGNAL REGION (signal samples only) — applied immediately
@@ -410,13 +488,25 @@ class SingleMuonProcessor(processor.ProcessorABC):
             n_mu_src = ak.num(src)
             # single-muon events: untouched by dup/cosA/dt
             self.output[f"n_evt_single_mu_{prefix_cs}"] += int(ak.sum(n_mu_src == 1))
+            # time of muons in single-muon events (veto can never touch these)
+            self.output["time_at_ip"].fill(
+                cat=ds_label, sel="1mu",
+                val=ak.flatten(src[n_mu_src == 1].timeAtIpInOut))
 
             ge2 = (n_mu_src >= 2)
             cs = src[ge2]
+            ev2 = events[ge2]   # run/lumi/event aligned with cs (dup-survivor dump)
 
             if len(cs) > 0:
                 self.output[f"n_evt_enter_{prefix_cs}"] += len(cs)
                 self.output["cosA_study_input_mult"].fill(cat=ds_label, val=ak.num(cs))
+                # time of muons in >=2-mu events, before the cosmic veto; upper/lower split
+                self.output["time_at_ip"].fill(cat=ds_label, sel="2mu_all",
+                                               val=ak.flatten(cs.timeAtIpInOut))
+                self.output["time_at_ip"].fill(cat=ds_label, sel="2mu_upper",
+                                               val=ak.flatten(cs[cs.phi > 0].timeAtIpInOut))
+                self.output["time_at_ip"].fill(cat=ds_label, sel="2mu_lower",
+                                               val=ak.flatten(cs[cs.phi < 0].timeAtIpInOut))
 
                 # ── STAGE 1: duplicate removal via outertrack/segment cosA (cosmic MC + NoBPTX) ──
                 pr = ak.combinations(cs, 2, fields=["a", "b"])
@@ -458,6 +548,36 @@ class SingleMuonProcessor(processor.ProcessorABC):
                 self.output[f"n_dup_removed_seg_{prefix_cs}"]     += int(ak.sum(ak.sum(rem_seg, axis=1)))
                 self.output[f"n_dup_pairs_surviving_{prefix_cs}"] += int(ak.sum(ak.sum(dup_surv, axis=1)))
 
+                # ── record duplicate pairs that SURVIVE the outertrack + segment cuts ──
+                #    (still flagged as duplicates → dump run/lumi/event + kinematics +
+                #     the outertrack/segment diagnostics that let them slip through)
+                if ak.any(dup_surv):
+                    run_p,  _ = ak.broadcast_arrays(ev2.run, a.pt)
+                    lumi_p, _ = ak.broadcast_arrays(ev2.luminosityBlock, a.pt)
+                    evt_p,  _ = ak.broadcast_arrays(ev2.event, a.pt)
+
+                    def _flat_surv(x):
+                        return ak.to_numpy(ak.flatten(x[dup_surv], axis=1))
+
+                    _cols = [
+                        _flat_surv(run_p), _flat_surv(lumi_p), _flat_surv(evt_p),
+                        _flat_surv(a.pt),  _flat_surv(a.eta),  _flat_surv(a.phi),
+                        _flat_surv(b.pt),  _flat_surv(b.eta),  _flat_surv(b.phi),
+                        _flat_surv(cos_out), _flat_surv(cos_seg),
+                        _flat_surv(a.outertrack_pt), _flat_surv(b.outertrack_pt),
+                        _flat_surv(a.nSeg), _flat_surv(b.nSeg), _flat_surv(elig),
+                    ]
+                    for (rr, ll, ee, apt, aeta, aphi, bpt, beta, bphi,
+                         co, csg, aop, bop, ans, bns, el) in zip(*_cols):
+                        self.output[f"dup_surv_rows_{prefix_cs}"].append((
+                            int(rr), int(ll), int(ee),
+                            float(apt), float(aeta), float(aphi),
+                            float(bpt), float(beta), float(bphi),
+                            float(co), float(csg),
+                            float(aop), float(bop),
+                            int(ans), int(bns), bool(el),
+                        ))
+
                 ev_veto_dup = ak.any(rem_out | rem_seg, axis=1)
 
                 cs_dup = cs[~ev_veto_dup]
@@ -486,6 +606,7 @@ class SingleMuonProcessor(processor.ProcessorABC):
                         lo_all = cs_cosA[cs_cosA.phi < 0]
                         has_both = (ak.num(up_all) >= 1) & (ak.num(lo_all) >= 1)
 
+                        ev_dt_veto = np.zeros(n_after_cosA, dtype=bool)
                         if ak.sum(has_both) > 0:
                             ub = up_all[has_both]
                             lb = lo_all[has_both]
@@ -499,6 +620,13 @@ class SingleMuonProcessor(processor.ProcessorABC):
                             dt_veto = ndof_ok & (dt < -20)
                             n_dt_veto = int(ak.sum(dt_veto))
                             self.output["cosA_dt_study_surviving_dt"].fill(cat=ds_label, val=dt[~dt_veto])
+                            ev_dt_veto[ak.to_numpy(has_both)] = ak.to_numpy(dt_veto)
+
+                        # time of muons in >=2-mu events surviving the FULL veto (dup + cosA + dt):
+                        # this is what inTimeMuon would act on in the "veto first" ordering
+                        cs_final = cs_cosA[~ev_dt_veto]
+                        self.output["time_at_ip"].fill(cat=ds_label, sel="2mu_after_veto",
+                                                       val=ak.flatten(cs_final.timeAtIpInOut))
 
                         # only "both-hemisphere" events can be dt-vetoed; the rest survive
                         self.output[f"n_evt_after_dt_{prefix_cs}"] += (n_after_cosA - n_dt_veto)
@@ -587,17 +715,32 @@ if __name__ == '__main__':
     print(" COSMIC REMOVAL CUTFLOW")
     print("=" * 80)
 
-    for ds_name, prefix in [("COSMIC MC", "cosmic"), ("NoBPTX DATA", "nobptx")]:
-        dtot  = out[f"n_dup_pairs_total_{prefix}"]
-        dout  = out[f"n_dup_removed_outer_{prefix}"]
-        dseg  = out[f"n_dup_removed_seg_{prefix}"]
-        dsurv = out[f"n_dup_pairs_surviving_{prefix}"]
-        extra = "   (expect ~145)" if prefix == "cosmic" else ""
-        print(f"\n  {ds_name} — duplicate-pair removal (first matching cut removes):")
-        print(f"    duplicate pairs found                : {dtot}")
-        print(f"    [1a] removed by outertrack cosA<-0.8 : {dout}")
-        print(f"    [1b] removed by segment   cosA<-0.8  : {dseg}")
-        print(f"    duplicate pairs surviving            : {dsurv}{extra}")
+    print("\n" + "-" * 80)
+    print("  CUTS APPLIED SO FAR — and exactly which muon each one acts on")
+    print("-" * 80)
+    print("  The cuts (a)-(d) are checked ONLY on the leading (highest-pT) muon of each")
+    print("  event. If the leading muon fails any of them, the whole event is dropped.")
+    print("  If it passes, the event is kept and EVERY other muon in it is kept too --")
+    print("  the sub-leading muons are never required to pass (a)-(d) themselves:")
+    print("      (a) leading muon  pt > 30 GeV")
+    print("      (b) leading muon  |eta| < 2.4")
+    print("      (c) leading muon  mediumId == True")
+    print("      (d) leading muon  pfRelIso03_all < 0.18")
+    print("      (NoBPTX only)     event npvsGood == 0  (no good primary vertex)")
+    print("  Counting note: a single real cosmic muon is often reconstructed as TWO")
+    print("  nearly identical muon tracks in the SAME event (a 'duplicate'). It is still")
+    print("  ONE event, counted once, but it now contains two muon objects -- so it lands")
+    print("  in the '>=2-muon' group (the 1-muon vs >=2-muon split counts muon tracks, not")
+    print("  physical muons). These duplicates are not removed up front; stage [1] below")
+    print("  is what identifies and removes them.")
+    print("  Cosmic-veto stages below act on >=2-muon events; single-muon events skip them")
+    print("  entirely (a lone muon cannot form a back-to-back pair) and are kept as-is:")
+    print("      [1] duplicate pair (|dpt|<0.5,|deta|<0.01,|dphi|<0.001) removed if its")
+    print("          outertrack cos(angle) < -0.8, else segment cos(angle) < -0.8")
+    print("      [2] cos(angle) < -0.99 between the leading muon and EACH sub-leading muon")
+    print("      [3] dt < -20 ns between the two pT-leading muons of opposite phi")
+    print("          hemispheres, applied only if BOTH have timeNDof > 7")
+    print("-" * 80)
 
     for ds_name, prefix in [("COSMICS MC", "cosmic"), ("NoBPTX DATA", "nobptx")]:
         e0 = out[f"n_evt_enter_{prefix}"]
@@ -605,34 +748,72 @@ if __name__ == '__main__':
         e2 = out[f"n_evt_after_cosA_{prefix}"]
         e3 = out[f"n_evt_after_dt_{prefix}"]
         n1 = out[f"n_evt_single_mu_{prefix}"]
+        n_proc      = out[f"n_events_total_{prefix}"]
+        surv_total  = n1 + e3          # single-muon events survive untouched + >=2mu survivors
+        enter_total = n1 + e0          # every event that passed the leading-muon cuts (has >=1 muon)
         print(f"\n  {ds_name} — event cutflow (cosmics remaining):")
         if prefix == "nobptx":
             print(f"    events containing a lead-based duplicate (info, NOT vetoed): {out['n_events_with_dup_nobptx']}")
-        print(f"    single-muon events (UNTOUCHED by dup/cosA/dt cuts): {n1}")
-        print(f"    [0] entering (>=2 mu, lead quality)    : {e0}")
+        print(f"    single-muon events (kept, never enter [1]/[2]/[3]): {n1}")
+        print(f"    [0] >=2-muon events entering the veto  : {e0}")
         print(f"    [1] after duplicate removal (outertrack + segment cosA) : {e1}   (removed {e0 - e1})")
         print(f"    [2] after standard cosA < -0.99        : {e2}   (removed {e1 - e2})")
         print(f"    [3] after dt < -20 ns (ndof>7 both)    : {e3}   (removed {e2 - e3})")
         if e0 > 0:
-            print(f"    overall survival: {e3}/{e0} = {100.0*e3/e0:.2f}%")
+            print(f"    >=2-muon-only survival (no single-mu)  : {e3}/{e0} = {100.0*e3/e0:.2f}%")
+        print(f"    ---------------- COMBINED (single-mu + >=2-mu) ----------------")
+        print(f"    TOTAL surviving cosmics  = {n1} (1mu) + {e3} (>=2mu) = {surv_total}")
+        if enter_total > 0:
+            print(f"    OVERALL survival vs events passing leading-muon cuts : {surv_total}/{enter_total} = {100.0*surv_total/enter_total:.2f}%")
+        if n_proc > 0:
+            print(f"    OVERALL survival vs ALL events processed: {surv_total}/{n_proc} = {100.0*surv_total/n_proc:.2f}%")
     print("=" * 80 + "\n")
 
-    print("=" * 80)
-    print(" TOTAL EVENTS PROCESSED (single-muon fraction)")
-    print("=" * 80)
-    for ds_name, prefix in [("COSMIC MC", "cosmic"), ("NoBPTX DATA", "nobptx")]:
-        n_total       = out[f"n_events_total_{prefix}"]
-        n_single_raw  = out[f"n_evt_single_mu_raw_{prefix}"]
-        n_single_cut  = out[f"n_evt_single_mu_{prefix}"]
-        print(f"\n  {ds_name}:")
-        print(f"    total events processed                 : {n_total}")
-        print(f"    single-muon events (RAW, no cuts)      : {n_single_raw}")
-        print(f"    single-muon events (after lead cuts)   : {n_single_cut}")
-        if n_total > 0:
-            print(f"    raw single-muon fraction               : {n_single_raw}/{n_total} = {100.0*n_single_raw/n_total:.2f}%")
-            print(f"    cut single-muon fraction               : {n_single_cut}/{n_total} = {100.0*n_single_cut/n_total:.2f}%")
-    print("=" * 80 + "\n")
+    # ════════════════════════════════════════════════════════════════════════
+    #  DUMP: duplicate pairs that survive the outertrack + segment cuts.
+    #  Two SEPARATE files — one for cosmic MC, one for NoBPTX data — with
+    #  run/lumi/event + kinematics so you can see why they still register as
+    #  duplicates.
+    # ════════════════════════════════════════════════════════════════════════
+    _hdr = (
+        "{:>8} {:>7} {:>13}  "
+        "{:>8} {:>7} {:>7}  {:>8} {:>7} {:>7}  "
+        "{:>8} {:>8}  {:>9} {:>9}  {:>6} {:>6}  {:>5}\n"
+    ).format("run", "lumi", "event",
+             "a_pt", "a_eta", "a_phi", "b_pt", "b_eta", "b_phi",
+             "cos_out", "cos_seg", "a_otpt", "b_otpt", "a_nSeg", "b_nSeg", "elig")
 
+    def _write_dup_survivor_file(path, ds_name, rows):
+        with open(path, "w") as fh:
+            fh.write(f"{ds_name}: duplicate PAIRS that survive the outertrack + segment cosA < -0.8 cuts.\n")
+            fh.write("These still look like duplicate / back-to-back muons after STAGE 1, so they\n")
+            fh.write("keep registering as duplicates. One row per surviving pair (muons a and b).\n")
+            fh.write("Diagnostics that explain why STAGE 1 missed them:\n")
+            fh.write("  cos_out = outertrack cos(angle)  (nan = pair not outertrack-eligible / no outer track)\n")
+            fh.write("  cos_seg = segment    cos(angle)  (nan = a or b has nSeg == 0)\n")
+            fh.write("  a_otpt/b_otpt = outertrack_pt    (<= 0 means no standalone outer track)\n")
+            fh.write("  a_nSeg/b_nSeg = # muon segments,  elig = outertrack-eligible flag\n")
+            fh.write("A pair is only removed when elig and cos_out < -0.8, or when cos_seg < -0.8.\n")
+            fh.write("\n" + "=" * 118 + "\n")
+            fh.write(f" {ds_name} — {len(rows)} surviving duplicate pair(s)\n")
+            fh.write("=" * 118 + "\n")
+            fh.write(_hdr)
+            for (rr, ll, ee, apt, aeta, aphi, bpt, beta, bphi,
+                 co, csg, aop, bop, ans, bns, el) in rows:
+                fh.write(
+                    ("{:>8d} {:>7d} {:>13d}  "
+                     "{:>8.3f} {:>7.3f} {:>7.3f}  {:>8.3f} {:>7.3f} {:>7.3f}  "
+                     "{:>8.3f} {:>8.3f}  {:>9.3f} {:>9.3f}  {:>6d} {:>6d}  {:>5}\n").format(
+                        rr, ll, ee, apt, aeta, aphi, bpt, beta, bphi,
+                        co, csg, aop, bop, ans, bns, str(el))
+                )
+        print(f"Wrote {len(rows)} {ds_name} surviving duplicate pair(s) to: {os.path.abspath(path)}")
+
+    _write_dup_survivor_file("dup_survivor_events_MC.txt",   "COSMIC MC",   out["dup_surv_rows_cosmic"])
+    _write_dup_survivor_file("dup_survivor_events_data.txt", "NoBPTX DATA", out["dup_surv_rows_nobptx"])
+    print()
+
+    '''
     # ── cosA study plots ──
     COSA_OUTPUT_DIR = "cosA_study_plots"
     os.makedirs(COSA_OUTPUT_DIR, exist_ok=True)
@@ -648,5 +829,14 @@ if __name__ == '__main__':
     save_muon_type_counts(out["muon_type"], "muon_type", "single_muon_", OUTPUT_DIR,
                           title_suffix="(300 GeV 100 mm vs Cosmics)",
                           filename_suffix="Stau_300_100mm_overlay")
+    '''
 
+    # ── timeAtIpInOut / inTimeMuon study plots ──
+    TIME_OUTPUT_DIR = "time_study_plots"
+    os.makedirs(TIME_OUTPUT_DIR, exist_ok=True)
+    for sel in ["1mu", "2mu_all", "2mu_upper", "2mu_lower", "2mu_after_veto",
+                "1mu_nolead", "2mu_all_nolead", "2mu_upper_nolead", "2mu_lower_nolead"]:
+        save_time_overlay(out["time_at_ip"], sel, "ITM_study_", TIME_OUTPUT_DIR,
+                          title_suffix="(Cosmic MC vs NoBPTX Data)", normalize=True)
+        
     print("Done!")
