@@ -491,7 +491,7 @@ class MuonSelectionStudyProcessor(processor.ProcessorABC):
         events["DisMuon"] = events.DisMuon[
             ak.argsort(events.DisMuon.pt, axis=1, ascending=False)]
 
-        # ── duplicate-track removal (same-charge, deta<0.01, dphi<0.001, dpt<0.5;
+        # ── duplicate-track removal (same-charge, deta<0.01, dphi<0.001
         #    keeps the first = highest-pT copy) ──
         muons_s = events.DisMuon
         local_i = ak.local_index(muons_s, axis=1)
@@ -501,7 +501,6 @@ class MuonSelectionStudyProcessor(processor.ProcessorABC):
             ((a.charge * b.charge) > 0)
             & (abs(a.eta - b.eta) < 0.01)
             & (abs(a.delta_phi(b)) < 0.001)
-            & (abs(a.pt - b.pt) < 0.5)
             & (ib < ia)
         )
         is_dup = ak.any(match, axis=2)
