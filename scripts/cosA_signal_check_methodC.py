@@ -1,0 +1,1171 @@
+#!/usr/bin/env python
+"""
+cosA_signal_check_methodC.py
+
+Signal-region cosmic-veto study using the METHOD C candidate selection:
+
+  candidate signal muon = the highest-pT DisMuon that passes ALL quality cuts
+      (pt > 30 GeV, |eta| < 2.4, mediumId, pfRelIso03_all < 0.18,
+       0.1 < |dxy| < 10 cm)
+
+  The candidate is NOT necessarily the highest-pT DisMuon of the event --
+  it is the highest-pT muon AMONG THOSE PASSING the cuts ("cand" everywhere
+  below, never "lead", to keep this distinction visible).
+
+  ALL other DisMuons are KEPT in the event, with no cuts applied, so the
+  cosmic vetoes can see them:
+    * cosA veto:   candidate vs EVERY other retained DisMuon; veto the event
+                   if any pair has cosA < -0.99 (back-to-back = cosmic-like)
+    * timing veto: highest-pT muon in the upper (phi>0) and lower (phi<0)
+                   hemisphere among ALL retained muons; require timeNDof > 7
+                   on both, veto if dt = t_upper - t_lower < -20 ns
+
+  Events where no DisMuon passes the quality cuts are dropped (no candidate).
+
+  NOTE on "leading/subleading" further down: inside the timing-veto section
+  those words refer to the pT ordering OF THE TWO HEMISPHERE MUONS ONLY,
+  not to the candidate.
+"""
+
+import os
+import pickle
+import awkward as ak
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+from hist import Hist, axis
+from coffea import processor
+from coffea.nanoevents import PFNanoAODSchema
+import coffea.nanoevents.methods.vector as vector
+
+PFNanoAODSchema.warn_missing_crossrefs = False
+PFNanoAODSchema.mixins["DisMuon"] = "Muon"
+
+NDOF_MIN = 7   # timeNDof must be > this on both hemisphere muons before Delta t is trusted
+
+# candidate quality cuts (method C signal-muon selection)
+PT_MIN     = 30.0
+ABSETA_MAX = 2.4
+ISO_MAX    = 0.18
+DXY_MIN    = 0.1     # cm
+DXY_MAX    = 10.0    # cm
+
+
+def _as_bool(x):
+    """Cast a NanoAOD flag (bool or int8 0/1) to a real boolean awkward array so
+    that logical ~ / & behave correctly."""
+    return ak.values_astype(x, np.bool_)
+
+
+def at_index(arr, opt_idx):
+    """arr[i] per event, where opt_idx is an option-typed per-event index
+    (None -> None).  Works on any jagged per-muon array."""
+    return ak.firsts(arr[ak.singletons(opt_idx)])
+
+
+def get_Lxy(genvistau):
+    """Transverse decay length: tau production vertex (= stau decay vertex)
+    minus the stau production vertex (= PV)."""
+    vx = genvistau.parent.vx - genvistau.parent.distinctParent.vx
+    vy = genvistau.parent.vy - genvistau.parent.distinctParent.vy
+    return np.sqrt(vx ** 2 + vy ** 2)
+
+
+def plot_cosA_efficiency(h_all, h_post, OUTPUT_DIR, PREFIX, title_suffix, filename_suffix, title):
+    if np.sum(h_all.values()) == 0:
+        print("Skipping efficiency plot (empty denominator)")
+        return
+
+    fig, (ax_dist, ax_eff) = plt.subplots(
+        2, 1, figsize=(8, 10), sharex=True,
+        gridspec_kw={"height_ratios": [2, 1]}
+    )
+
+    all_vals  = h_all.values()
+    post_vals = h_post.values()
+    centers   = h_all.axes["val"].centers
+    edges     = h_all.axes["val"].edges
+
+    ax_dist.step(edges[:-1], all_vals,  where="post", label="All Signal",  color="blue", linestyle="--")
+    ax_dist.step(edges[:-1], post_vals, where="post", label="Post-veto",   color="red",  linestyle="-")
+    ax_dist.set_ylabel("Events")
+    ax_dist.set_title(title + " " + title_suffix)
+    ax_dist.legend()
+
+    eff = np.where(all_vals > 0, post_vals / all_vals, np.nan)
+    err = np.where(all_vals > 0,
+                   np.sqrt(eff * (1 - np.clip(eff, 0, 1)) / np.clip(all_vals, 1, None)),
+                   np.nan)
+    ax_eff.errorbar(centers, eff, yerr=err, fmt="o-", color="black", capsize=3, markersize=4)
+    ax_eff.axhline(1.0, color="gray", linestyle="--", alpha=0.7)
+    ax_eff.set_xlabel(r"Candidate DisMuon $p_T$ [GeV]")
+    ax_eff.set_ylabel("Efficiency")
+    ax_eff.set_ylim(-0.05, 1.15)
+
+    outpath = os.path.join(OUTPUT_DIR, f"{PREFIX}efficiency_{filename_suffix}.pdf")
+    fig.savefig(outpath, bbox_inches="tight")
+    plt.close(fig)
+    print(f"    Saved efficiency plot: {outpath}")
+
+
+def plot_ndof_lead_sub(h_lead, h_sub, OUTPUT_DIR, PREFIX, title_suffix, filename_suffix):
+    """timeNDof of the two muons used for the Delta t computation, separated by
+    whether the muon is the higher-pT or lower-pT member of the hemisphere pair.
+    The vertical line at NDOF_MIN shows where the ndof cut bites."""
+    if (np.sum(h_lead.values()) + np.sum(h_sub.values())) == 0:
+        print("Skipping ndof(lead/sub) plot (empty)")
+        return
+    fig, ax = plt.subplots(figsize=(8, 6))
+    edges = h_lead.axes["val"].edges
+    ax.step(edges[:-1], h_lead.values(), where="post", color="blue", label=r"Higher-$p_T$ $\Delta t$ muon")
+    ax.step(edges[:-1], h_sub.values(),  where="post", color="red",  label=r"Lower-$p_T$ $\Delta t$ muon")
+    ax.axvline(NDOF_MIN, color="green", linestyle="--", label=f"ndof > {NDOF_MIN} cut")
+    ax.set_xlabel("DisMuon timeNDof")
+    ax.set_ylabel("DisMuons (one entry per hemisphere-leader)")
+    ax.set_title("timeNDof of the two Delta-t muons " + title_suffix)
+    ax.legend()
+    outpath = os.path.join(OUTPUT_DIR, f"{PREFIX}ndof_leadsub_{filename_suffix}.pdf")
+    fig.savefig(outpath, bbox_inches="tight")
+    plt.close(fig)
+    print(f"    Saved ndof lead/sub plot: {outpath}")
+
+
+def plot_dt(h, OUTPUT_DIR, PREFIX, title_suffix, filename_suffix):
+    """Delta t for events that survived cosA AND passed ndof>7 on both hemisphere
+    leaders (i.e. the events the Delta t < -20 ns veto actually acts on)."""
+    if np.sum(h.values()) == 0:
+        print("Skipping Delta t plot (empty)")
+        return
+    fig, ax = plt.subplots(figsize=(8, 6))
+    edges = h.axes["val"].edges
+    ax.step(edges[:-1], h.values(), where="post", color="purple")
+    ax.axvline(-20, color="red", linestyle="--", label=r"$\Delta t < -20$ ns veto")
+    ax.set_xlabel(r"$\Delta t = t_{\mathrm{upper}} - t_{\mathrm{lower}}$ [ns]")
+    ax.set_ylabel("Events (ndof > 7 on both leaders)")
+    ax.set_title(r"$\Delta t$ of ndof-passing events " + title_suffix)
+    ax.legend()
+    outpath = os.path.join(OUTPUT_DIR, f"{PREFIX}deltat_{filename_suffix}.pdf")
+    fig.savefig(outpath, bbox_inches="tight")
+    plt.close(fig)
+    print(f"    Saved Delta t plot: {outpath}")
+
+
+def plot_dtveto_muon_types(lead_counts, sub_counts, OUTPUT_DIR, PREFIX, title_suffix, filename_suffix):
+    """Mutually-exclusive muon type of the two Delta-t muons, ONLY for events the
+    Delta t < -20 ns cut vetoes.  Each event contributes exactly one higher-pT and
+    one lower-pT hemisphere muon.  'Standalone only' is the bucket that fails
+    Loose ID (Loose ID = isGlobal || isTracker)."""
+    labels = ["Global", "Tracker\n(not global)", "Standalone\nonly", "None"]
+    if sum(lead_counts) + sum(sub_counts) == 0:
+        print("Skipping dt-veto muon-type plot (no dt-vetoed events)")
+        return
+    fig, ax = plt.subplots(figsize=(9, 6))
+    x = np.arange(len(labels))
+    w = 0.38
+    b1 = ax.bar(x - w / 2, lead_counts, w, label=r"Higher-$p_T$ $\Delta t$ muon", color="#4C72B0")
+    b2 = ax.bar(x + w / 2, sub_counts,  w, label=r"Lower-$p_T$ $\Delta t$ muon",  color="#C44E52")
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_ylabel(r"DisMuons (one per $\Delta t$-vetoed event)")
+    ax.set_xlabel("Muon type (mutually exclusive)")
+    ax.set_title(r"Muon type in $\Delta t<-20$ ns vetoed events " + title_suffix)
+    ax.legend()
+    for bars in (b1, b2):
+        for bar in bars:
+            h = bar.get_height()
+            if h > 0:
+                ax.text(bar.get_x() + bar.get_width() / 2, h, f"{int(h)}", ha="center", va="bottom")
+    # shade the "Standalone only" column -> the muons a Loose ID cut would remove
+    ax.axvspan(x[2] - 0.5, x[2] + 0.5, color="orange", alpha=0.12)
+    ax.text(x[2], ax.get_ylim()[1] * 0.92, "fails Loose ID\n(isGlobal||isTracker)",
+            ha="center", va="top", fontsize=8, color="darkorange")
+    outpath = os.path.join(OUTPUT_DIR, f"{PREFIX}dtveto_muon_types_{filename_suffix}.pdf")
+    fig.savefig(outpath, bbox_inches="tight")
+    plt.close(fig)
+    print(f"    Saved dt-veto muon-type plot: {outpath}")
+
+
+def plot_time2d(h, title, OUTPUT_DIR, PREFIX, filename_suffix):
+    """2D timeAtIpInOut: higher-pT hemisphere muon (x) vs lower-pT (y) of the
+    Delta-t pair.  In-time muons should cluster at x~0; out-of-time muons
+    spread to +-25, +-50 ns (the 25 ns LHC bunch structure)."""
+    if np.sum(h.values()) == 0:
+        print(f"Skipping 2D time plot {filename_suffix} (empty)")
+        return
+    fig, ax = plt.subplots(figsize=(7, 6))
+    h.plot2d(ax=ax, norm=mcolors.LogNorm(vmin=1))
+    for t in (-50, -25, 0, 25, 50):
+        ax.axhline(t, color="white", lw=0.6, ls=":", alpha=0.5)
+        ax.axvline(t, color="white", lw=0.6, ls=":", alpha=0.5)
+    ax.set_xlabel(r"Higher-$p_T$ $\Delta t$ muon  timeAtIpInOut [ns]")
+    ax.set_ylabel(r"Lower-$p_T$ $\Delta t$ muon  timeAtIpInOut [ns]")
+    ax.set_title(title)
+    outpath = os.path.join(OUTPUT_DIR, f"{PREFIX}time2d_{filename_suffix}.pdf")
+    fig.savefig(outpath, bbox_inches="tight")
+    plt.close(fig)
+    print(f"    Saved 2D time plot: {outpath}")
+
+
+def plot_sub_time(h, OUTPUT_DIR, PREFIX, filename_suffix, title):
+    """1D timeAtIpInOut of the lower-pT dt muon (ndof>7).  Vertical lines mark
+    the 25 ns bunch structure and the |t| = 12.5 ns (half-BX) in/out-of-time split."""
+    if np.sum(h.values()) == 0:
+        print(f"Skipping {filename_suffix} (empty)")
+        return
+    fig, ax = plt.subplots(figsize=(8, 6))
+    edges = h.axes["val"].edges
+    ax.step(edges[:-1], h.values(), where="post", color="purple")
+    for t in (-50, -25, 25, 50):
+        ax.axvline(t, color="gray", ls=":", alpha=0.6)
+    ax.axvline(12.5,  color="red", ls="--", alpha=0.8, label="|t| = 12.5 ns")
+    ax.axvline(-12.5, color="red", ls="--", alpha=0.8)
+    ax.set_xlabel(h.axes["val"].label)
+    ax.set_ylabel("Lower-pT dt muons / bin")
+    ax.set_title(title)
+    ax.legend()
+    outpath = os.path.join(OUTPUT_DIR, f"{PREFIX}{filename_suffix}.pdf")
+    fig.savefig(outpath, bbox_inches="tight")
+    plt.close(fig)
+    print(f"    Saved subleading-time plot: {outpath}")
+
+
+def plot_sub_overlay(h, OUTPUT_DIR, PREFIX, filename_suffix, title):
+    """Overlay a dt-muon property for the categories on the tcat axis,
+    area-normalized so the shapes compare regardless of yield."""
+    if np.sum(h.values()) == 0:
+        print(f"Skipping overlay {filename_suffix} (empty)")
+        return
+    fig, ax = plt.subplots(figsize=(8, 6))
+    edges = h.axes["val"].edges
+    for cat in h.axes["tcat"]:
+        vals = h[{"tcat": cat}].values()
+        tot  = vals.sum()
+        if tot == 0:
+            continue
+        ax.step(edges[:-1], vals / tot, where="post", label=f"{cat}  (N={int(tot)})")
+    ax.set_xlabel(h.axes["val"].label)
+    ax.set_ylabel("Fraction of pairs / bin")
+    ax.set_title(title)
+    ax.legend()
+    outpath = os.path.join(OUTPUT_DIR, f"{PREFIX}{filename_suffix}.pdf")
+    fig.savefig(outpath, bbox_inches="tight")
+    plt.close(fig)
+    print(f"    Saved overlay plot: {outpath}")
+
+
+def plot_2d_by_time(h, OUTPUT_DIR, PREFIX, base_suffix, title):
+    """2D higher-pT (x) vs lower-pT (y) dt-muon variable, one PDF per
+    in/out-of-time category (split by the lower-pT muon's timing)."""
+    for cat in h.axes["tcat"]:
+        hc = h[{"tcat": cat}]
+        if np.sum(hc.values()) == 0:
+            continue
+        fig, ax = plt.subplots(figsize=(7, 6))
+        hc.plot2d(ax=ax, norm=mcolors.LogNorm(vmin=1))
+        ax.set_title(f"{title}  [{cat}]")
+        safe = cat.replace("-", "")
+        outpath = os.path.join(OUTPUT_DIR, f"{PREFIX}{base_suffix}_{safe}.pdf")
+        fig.savefig(outpath, bbox_inches="tight")
+        plt.close(fig)
+        print(f"    Saved 2D plot: {outpath}")
+
+
+class CosASignalCheckProcessor(processor.ProcessorABC):
+    def __init__(self):
+        self.output = {
+            "n_events_initial":            0,
+            "n_gen_signal":                0,   # gen mu+tau region: 1 GenVisStauTau + 1 GenMuon + 0 GenElectron
+            "n_after_jetmet_mu":           0,   # jet==1, MET>105, >=1 DisMuon (before candidate selection)
+            "n_signal_denom":              0,   # events with a method C candidate  (veto denominator)
+            "n_events_2plus_muons":        0,   # candidate events with 2+ retained DisMuons
+            "n_duplicate_tracks_removed":  0,
+
+            "n_events_vetoed_cosA":        0,   # cosA < -0.99 veto (candidate vs any retained muon)
+
+            # --- timing veto, correctly gated on ndof>7 -----------------------
+            "n_events_pair_present":       0,   # post-cosA, an upper AND a lower hemisphere muon exist
+            "n_events_excluded_ndof":      0,   # pair present but ndof<=7 on a leader -> NOT eligible for dt veto
+            "n_events_vetoed_ndof_dt":     0,   # ndof>7 on both AND dt < -20 ns  (the real timing veto)
+            "n_dt_veto_no_ndof":           0,   # OLD/buggy: dt < -20 ignoring ndof  (for comparison)
+
+            # ndof on the two Delta-t muons, split higher-pT vs lower-pT of the pair
+            "n_leadmu_ndof_pass":          0,
+            "n_leadmu_ndof_fail":          0,
+            "n_submu_ndof_pass":           0,
+            "n_submu_ndof_fail":           0,
+
+            "n_numer_cosA":                0,   # survive cosA
+            "n_numer_full":                0,   # survive cosA + (ndof+dt)
+
+            # --- inTimeMuon cross-checks on the two Delta-t legs --------------
+            "n_offtime_pairs":             0,   # ndof_ok pairs with |dt| >= 12.5 ns
+            "n_offtime_both_intime":       0,   # ... of those, both legs inTimeMuon==True
+            "n_suboff_in_window":          0,   # -45 < sub timeAtIpInOut < +20  (CMB window kept it)
+            "n_suboff_out_window":         0,   # outside (-45, +20)  -> only RPC could have kept it
+            "n_suboff_genflav0":           0,   # off-time lower-pT legs with genPartFlav==0 (unmatched/pileup)
+            "n_suboff_norpc":              0,   # off-time lower-pT legs with 0 valid RPC hits
+
+            # dt (upper-lower) for ndof>7 pairs: SIGNED bins (both sides), 25 ns bunch spacing
+            "n_dt_ndofok":   0,   # total ndof>7 pairs (denominator)
+            "n_dt_neg_hi":   0,   # dt < -62.5 ns
+            "n_dt_neg_50":   0,   # -62.5 <= dt < -37.5 ns  (~ -50)
+            "n_dt_neg_25":   0,   # -37.5 <= dt < -12.5 ns  (~ -25)
+            "n_dt_central":  0,   # -12.5 <= dt < +12.5 ns  (in-time, ~0)
+            "n_dt_pos_25":   0,   # +12.5 <= dt < +37.5 ns  (~ +25)
+            "n_dt_pos_50":   0,   # +37.5 <= dt < +62.5 ns  (~ +50)
+            "n_dt_pos_hi":   0,   # dt >= +62.5 ns
+
+            # mutually-exclusive muon type of the two dt muons, ONLY for dt-vetoed events
+            "n_dtveto_lead_global":        0,
+            "n_dtveto_lead_tracker":       0,   # tracker but not global
+            "n_dtveto_lead_saonly":        0,   # standalone, not global, not tracker  (fails Loose ID)
+            "n_dtveto_lead_none":          0,
+            "n_dtveto_sub_global":         0,
+            "n_dtveto_sub_tracker":        0,
+            "n_dtveto_sub_saonly":         0,
+            "n_dtveto_sub_none":           0,
+
+            # candidate = method C signal muon (NOT necessarily the highest-pT muon)
+            "cand_pt_all":       Hist(axis.Regular(50, 0, 500, name="val", label=r"Candidate DisMuon $p_T$ [GeV]")),
+            "cand_pt_post_cosA": Hist(axis.Regular(50, 0, 500, name="val", label=r"Candidate DisMuon $p_T$ [GeV]")),
+            "cand_pt_post_full": Hist(axis.Regular(50, 0, 500, name="val", label=r"Candidate DisMuon $p_T$ [GeV]")),
+
+            # timeNDof of the two Delta-t muons (all pair-present events), split by pair pT order
+            "ndof_lead": Hist(axis.Regular(50, 0, 50, name="val", label="timeNDof")),
+            "ndof_sub":  Hist(axis.Regular(50, 0, 50, name="val", label="timeNDof")),
+            # Delta t for events that pass ndof>7 on both leaders
+            "dt_ndofpass": Hist(axis.Regular(100, -100, 100, name="val", label=r"$\Delta t$ [ns]")),
+            # timeNDof of all retained muons in candidate events
+            "timeNDof_all": Hist(axis.Regular(50, 0, 50, name="val", label="DisMuon timeNDof")),
+
+            # ── 2D timeAtIpInOut: higher-pT (x) vs lower-pT (y) muon of the
+            #    Delta-t pair, split by the lower-pT muon's (mutually exclusive) type ──
+            "time_lead_vs_sub_global": Hist(
+                axis.Regular(80, -80, 80, name="lead", label=r"Higher-$p_T$ $\mu$ timeAtIpInOut [ns]"),
+                axis.Regular(80, -80, 80, name="sub",  label=r"Lower-$p_T$ $\mu$ timeAtIpInOut [ns]"),
+            ),
+            "time_lead_vs_sub_tracker": Hist(
+                axis.Regular(80, -80, 80, name="lead", label=r"Higher-$p_T$ $\mu$ timeAtIpInOut [ns]"),
+                axis.Regular(80, -80, 80, name="sub",  label=r"Lower-$p_T$ $\mu$ timeAtIpInOut [ns]"),
+            ),
+            "time_lead_vs_sub_standalone": Hist(
+                axis.Regular(80, -80, 80, name="lead", label=r"Higher-$p_T$ $\mu$ timeAtIpInOut [ns]"),
+                axis.Regular(80, -80, 80, name="sub",  label=r"Lower-$p_T$ $\mu$ timeAtIpInOut [ns]"),
+            ),
+
+            # ── Investigative: lower-pT dt-muon time (shows the 25 ns comb) ──
+            "sub_time": Hist(axis.Regular(120, -75, 75, name="val", label=r"Lower-$p_T$ $\mu$ timeAtIpInOut [ns]")),
+
+            # ── timing SIGNIFICANCE |t/sigma_t| of the off-time lower-pT leg ──
+            "sig_sub_offtime": Hist(axis.Regular(60, 0, 30, name="val",
+                                    label=r"$|t/\sigma_t|$ of lower-$p_T$ $\mu$ (off-time)")),
+            "sig_sub_intime": Hist(axis.Regular(60, 0, 30, name="val",
+                                   label=r"$|t/\sigma_t|$ of lower-$p_T$ $\mu$ (in-time)")),
+            # ── SIGNED timeAtIpInOut of the off-time lower-pT leg (|t| >= 12.5 ns) ──
+            "sub_time_offtime": Hist(axis.Regular(100, -75, 75, name="val",
+                                     label=r"Lower-$p_T$ $\mu$ timeAtIpInOut [ns] (|t| $\geq$ 12.5)")),
+
+            # ── OOT-pileup diagnostics on the lower-pT leg: in-time vs off-time overlays ──
+            "sub_genflav": Hist(axis.StrCategory([], name="tcat", growth=True),
+                                axis.Regular(25, -0.5, 24.5, name="val", label="Lower-pT dt muon genPartFlav")),
+            "sub_rpchits": Hist(axis.StrCategory([], name="tcat", growth=True),
+                                axis.Regular(21, -0.5, 20.5, name="val", label="Lower-pT dt muon numberOfValidMuonRPCHits")),
+            "sub_dxy_io":  Hist(axis.StrCategory([], name="tcat", growth=True),
+                                axis.Regular(60, -30, 30, name="val", label=r"Lower-pT dt muon $d_{xy}$ [cm]")),
+            "sub_inout_vs_outin": Hist(axis.StrCategory([], name="tcat", growth=True),
+                                       axis.Regular(80, -60, 60, name="inout", label="Lower-pT dt muon timeAtIpInOut [ns]"),
+                                       axis.Regular(80, -60, 60, name="outin", label="Lower-pT dt muon timeAtIpOutIn [ns]")),
+
+            # ── Unifying check: lower-pT |eta| vs its timing resolution / ndof ──
+            "sub_eta_vs_terr": Hist(
+                axis.StrCategory([], name="tcat", growth=True),
+                axis.Regular(50, 0, 2.5, name="abseta", label=r"Lower-pT dt muon $|\eta|$"),
+                axis.Regular(60, 0, 6,   name="terr",   label=r"Lower-pT dt muon timeAtIpInOutErr [ns]")),
+            "sub_eta_vs_ndof": Hist(
+                axis.StrCategory([], name="tcat", growth=True),
+                axis.Regular(50, 0, 2.5, name="abseta", label=r"Lower-pT dt muon $|\eta|$"),
+                axis.Regular(50, 0, 50,  name="ndof",   label="Lower-pT dt muon timeNDof")),
+
+            # ── Per-variable overlay: higher-pT vs lower-pT(in-time) vs lower-pT(out-of-time) ──
+            "prop_pt":      Hist(axis.StrCategory([], name="tcat", growth=True), axis.Regular(50, 0, 500,   name="val", label=r"Muon $p_T$ [GeV]")),
+            "prop_eta":     Hist(axis.StrCategory([], name="tcat", growth=True), axis.Regular(50, -2.5, 2.5, name="val", label=r"Muon $\eta$")),
+            "prop_dxy":     Hist(axis.StrCategory([], name="tcat", growth=True), axis.Regular(60, -30, 30,   name="val", label=r"Muon $d_{xy}$ [cm]")),
+            "prop_dz":      Hist(axis.StrCategory([], name="tcat", growth=True), axis.Regular(60, -100, 100, name="val", label=r"Muon $d_z$ [cm]")),
+            "prop_dxybs":   Hist(axis.StrCategory([], name="tcat", growth=True), axis.Regular(60, -30, 30,   name="val", label=r"Muon $d_{xy}^{BS}$ [cm]")),
+            "prop_timeErr": Hist(axis.StrCategory([], name="tcat", growth=True), axis.Regular(60, 0, 6,      name="val", label=r"Muon timeAtIpInOutErr [ns]")),
+
+            # ── cosα between the higher-pT and lower-pT dt muon ──
+            "cosA_lead_sub_by_time": Hist(axis.StrCategory([], name="tcat", growth=True), axis.Regular(100, -1.0, 1.0, name="val", label=r"$\cos\alpha$(pair)")),
+
+            # ── 2D higher-pT vs lower-pT dt muon: eta, pt, phi ──
+            "eta2d_lead_sub": Hist(axis.StrCategory([], name="tcat", growth=True),
+                                   axis.Regular(50, -2.5, 2.5, name="lead", label=r"Higher-$p_T$ $\mu$ $\eta$"),
+                                   axis.Regular(50, -2.5, 2.5, name="sub",  label=r"Lower-$p_T$ $\mu$ $\eta$")),
+            "pt2d_lead_sub":  Hist(axis.StrCategory([], name="tcat", growth=True),
+                                   axis.Regular(50, 0, 500, name="lead", label=r"Higher-$p_T$ $\mu$ $p_T$ [GeV]"),
+                                   axis.Regular(50, 0, 200, name="sub",  label=r"Lower-$p_T$ $\mu$ $p_T$ [GeV]")),
+            "phi2d_lead_sub": Hist(axis.StrCategory([], name="tcat", growth=True),
+                                   axis.Regular(50, -np.pi, np.pi, name="lead", label=r"Higher-$p_T$ $\mu$ $\phi$"),
+                                   axis.Regular(50, -np.pi, np.pi, name="sub",  label=r"Lower-$p_T$ $\mu$ $\phi$")),
+
+            "time_all": Hist(axis.Regular(300, -300, 300, name="val", label=r"DisMuon timeAtIpInOut [ns]")),
+
+            # ── Cross-check: genPartFlav of the STANDARD Muon collection ──
+            "muon_genflav": Hist(axis.Regular(25, -0.5, 24.5, name="val", label="Standard Muon genPartFlav")),
+        }
+
+    def process(self, events):
+        dataset = events.metadata.get("dataset", "Unknown")
+        self.output["n_events_initial"] += len(events)
+
+        is_signal = not ("Cosmic" in dataset or dataset.startswith("LooseMu")
+                         or dataset == "test_cosmics_calib" or "NoBPTX" in dataset)
+        has_gen = "GenPart" in events.fields
+
+        if not (is_signal and has_gen):
+            return self.output
+
+        # ════════════════════════════════════════════════════════════
+        # GEN-LEVEL SIGNAL REGION (applied BEFORE any DisMuon cuts):
+        #   exactly 1 GenVisStauTau, exactly 1 GenMuon, 0 GenElectrons
+        # ════════════════════════════════════════════════════════════
+        gpart = events.GenPart
+        events['staus'] = gpart[(abs(gpart.pdgId) == 1000015) & gpart.hasFlags("isLastCopy")]
+        events['staus_taus'] = events.staus.distinctChildren[
+            (abs(events.staus.distinctChildren.pdgId) == 15) &
+            events.staus.distinctChildren.hasFlags("isLastCopy") &
+            events.staus.distinctChildren.hasFlags("fromHardProcess")
+        ]
+
+        genvistau_Lxy = get_Lxy(events.GenVisTau)
+        events['GenVisStauTaus'] = events.GenVisTau[
+            (abs(events.GenVisTau.parent.pdgId) == 15) &
+            (abs(events.GenVisTau.parent.distinctParent.pdgId) == 1000015) &
+            events.GenVisTau.parent.distinctParent.hasFlags("isLastCopy") &
+            events.GenVisTau.parent.hasFlags("fromHardProcess") &
+            (genvistau_Lxy < 100.0) &
+            (events.GenVisTau.pt > 20) &
+            (abs(events.GenVisTau.eta) < 2.4)
+        ]
+        d0 = abs(
+            (events.GenVisStauTaus.parent.vy - events.GenVtx.y) * np.cos(events.GenVisStauTaus.parent.phi) -
+            (events.GenVisStauTaus.parent.vx - events.GenVtx.x) * np.sin(events.GenVisStauTaus.parent.phi)
+        )
+        events['GenVisStauTaus'] = ak.with_field(events.GenVisStauTaus, d0, where="d0")
+
+        events['GenMuon'] = gpart[(abs(gpart.pdgId) == 13) & gpart.hasFlags("isLastCopy")]
+        events['GenMuon'] = events.GenMuon[
+            (events.GenMuon.pt > 20) &
+            (abs(events.GenMuon.eta) < 2.4) &
+            (abs(events.GenMuon.distinctParent.distinctParent.pdgId) == 1000015)
+        ]
+
+        events['GenElectron'] = events.GenPart[(abs(events.GenPart.pdgId) == 11) & events.GenPart.hasFlags("isLastCopy")]
+        events['GenElectron'] = events.GenElectron[
+            (events.GenElectron.pt > 20) &
+            (abs(events.GenElectron.eta) < 2.4) &
+            (abs(events.GenElectron.distinctParent.distinctParent.pdgId) == 1000015)
+        ]
+
+        gen_mask = (
+            (ak.num(events.GenVisStauTaus) == 1) &
+            (ak.num(events.GenMuon) == 1) &
+            (ak.num(events.GenElectron) == 0)
+        )
+        self.output["n_gen_signal"] += int(ak.sum(gen_mask))
+        events = events[gen_mask]
+        if len(events) == 0:
+            return self.output
+
+        events["DisMuon"] = ak.zip(
+            {
+                "pt":                       events.DisMuon.pt,
+                "eta":                      events.DisMuon.eta,
+                "phi":                      events.DisMuon.phi,
+                "mass":                     events.DisMuon.mass,
+                "charge":                   events.DisMuon.charge,
+                "timeNDof":                 events.DisMuon.timeNDof,
+                "dxy":                      events.DisMuon.dxy,
+                "dxybs":                    events.DisMuon.dxybs,
+                "dz":                       events.DisMuon.dz,
+                "numberOfValidMuonDTHits":  events.DisMuon.numberOfValidMuonDTHits,
+                "numberOfValidMuonCSCHits": events.DisMuon.numberOfValidMuonCSCHits,
+                "numberOfValidMuonHits":    events.DisMuon.numberOfValidMuonHits,
+                "dtStationsWithValidHits":  events.DisMuon.dtStationsWithValidHits,
+                "timeAtIpInOut":            events.DisMuon.timeAtIpInOut,
+                "timeAtIpInOutErr":         events.DisMuon.timeAtIpInOutErr,
+                "mediumId":                 events.DisMuon.mediumId,
+                "pfRelIso03_all":           events.DisMuon.pfRelIso03_all,
+                "isStandalone":             events.DisMuon.isStandalone,
+                "isGlobal":                 events.DisMuon.isGlobal,
+                "isTracker":                events.DisMuon.isTracker,
+                "inTimeMuon":               events.DisMuon.inTimeMuon,   # keep for downstream checks
+                "timeAtIpOutIn":            events.DisMuon.timeAtIpOutIn,
+                "genPartFlav":              events.DisMuon.genPartFlav,
+                "numberOfValidMuonRPCHits": events.DisMuon.numberOfValidMuonRPCHits,
+            },
+            with_name="PtEtaPhiMLorentzVector",
+            behavior=vector.behavior,
+        )
+
+        # ── Sort by pT once (index 0 = highest pT), then remove duplicate
+        #    tracks (same-charge, deta<0.01, dphi<0.001; the
+        #    higher-pT copy is kept).  NO quality cuts are applied here --
+        #    the full collection is retained for the cosmic vetoes. ──
+        events["DisMuon"] = events.DisMuon[
+            ak.argsort(events.DisMuon.pt, axis=1, ascending=False)]
+        muons_s = events.DisMuon
+        local_i = ak.local_index(muons_s, axis=1)
+        a, b    = ak.unzip(ak.cartesian([muons_s, muons_s], axis=1, nested=True))
+        ia, ib  = ak.unzip(ak.cartesian([local_i, local_i], axis=1, nested=True))
+        dup_match = (
+            ((a.charge * b.charge) > 0)
+            & (abs(a.eta - b.eta) < 0.01)
+            & (abs(a.delta_phi(b)) < 0.001)
+            & (ib < ia)
+        )
+        is_dup = ak.any(dup_match, axis=2)
+        self.output["n_duplicate_tracks_removed"] += int(ak.sum(is_dup))
+        events["DisMuon"] = muons_s[~is_dup]
+
+        # ── Signal-only event filtering (jets + MET) ──
+        charged_sel = events.Jet.constituents.pf.charge != 0
+        dxy = ak.where(
+            ak.all(events.Jet.constituents.pf.charge == 0, axis=-1),
+            -999,
+            ak.flatten(
+                events.Jet.constituents.pf[
+                    ak.argmax(events.Jet.constituents.pf[charged_sel].pt, axis=2, keepdims=True)
+                ].d0,
+                axis=-1,
+            ),
+        )
+        dxy = ak.fill_none(dxy, -999)
+        events["Jet"] = ak.with_field(events.Jet, dxy, where="dxy")
+
+        jets = events.Jet[
+            (abs(events.Jet.eta) < 2.4) &
+            (events.Jet.pt > 32) &
+            (events.Jet.neHEF < 0.99) &
+            (events.Jet.neEmEF < 0.9) &
+            ((events.Jet.chMultiplicity + events.Jet.neMultiplicity) > 1) &
+            (events.Jet.chMultiplicity > 0) &
+            (events.Jet.muEF < 0.1) &
+            (events.Jet.chEmEF < 0.8) &
+            (events.Jet.disTauTag_score1 > 0.9) &
+            (abs(events.Jet.dxy) > 0.02)
+        ]
+
+        good_MET    = events.PFMET.pt > 105
+        signal_mask = (ak.num(jets) == 1) & good_MET
+        events      = events[signal_mask]
+
+        # ── Require at least 1 DisMuon ──
+        mask_has_muons = ak.num(events.DisMuon) > 0
+        if ak.sum(mask_has_muons) == 0:
+            return self.output
+        events = events[mask_has_muons]
+        self.output["n_after_jetmet_mu"] += len(events)
+
+        # genPartFlav of the STANDARD Muon collection (all muons, signal-selected events)
+        if "Muon" in events.fields:
+            self.output["muon_genflav"].fill(
+                val=ak.to_numpy(ak.flatten(events.Muon.genPartFlav)))
+
+        # ══════════════════════════════════════════════════════════════════
+        # METHOD C CANDIDATE SELECTION
+        #   candidate = highest-pT DisMuon passing ALL quality cuts;
+        #   every other DisMuon is RETAINED (no cuts) for the vetoes below.
+        #   Events with no passing muon are dropped.
+        # ══════════════════════════════════════════════════════════════════
+        muons = events.DisMuon
+        pass_all = (
+            (muons.pt > PT_MIN)
+            & (abs(muons.eta) < ABSETA_MAX)
+            & _as_bool(muons.mediumId)
+            & (muons.pfRelIso03_all < ISO_MAX)
+            & (abs(muons.dxy) > DXY_MIN)
+            & (abs(muons.dxy) < DXY_MAX)
+        )
+        cand_idx_all = ak.firsts(ak.local_index(muons.pt, axis=1)[pass_all])
+        has_cand     = ~ak.is_none(cand_idx_all)
+
+        if int(ak.sum(has_cand)) == 0:
+            return self.output
+        events   = events[has_cand]
+        cand_idx = ak.fill_none(cand_idx_all[has_cand], 0)   # no Nones remain after the filter
+
+        muons   = events.DisMuon           # ALL retained muons (pT-sorted, dedup)
+        cand    = at_index(muons, cand_idx)  # the candidate signal muon
+        n_muons = ak.num(muons)
+
+        cand_pt_np = ak.to_numpy(ak.fill_none(cand.pt, 0.0))
+
+        # ══════════════════════════════════════════
+        # DENOMINATOR: signal events with a method C candidate
+        # ══════════════════════════════════════════
+        self.output["n_signal_denom"] += len(events)
+        self.output["cand_pt_all"].fill(val=cand_pt_np)
+        self.output["timeNDof_all"].fill(val=ak.to_numpy(ak.flatten(muons.timeNDof)))
+        self.output["time_all"].fill(val=ak.to_numpy(ak.flatten(muons.timeAtIpInOut)))
+        self.output["n_events_2plus_muons"] += int(ak.sum(n_muons >= 2))
+
+        # ══════════════════════════════════════════
+        # cosA VETO: cosA between the CANDIDATE and EVERY other retained
+        # DisMuon (cut-failing muons included -- the point of method C).
+        # If ANY pair has cosA < -0.99, veto the event.
+        # ══════════════════════════════════════════
+        idx    = ak.local_index(muons.pt, axis=1)
+        others = muons[idx != cand_idx]
+
+        cpx = ak.fill_none(cand.px, 0.0)
+        cpy = ak.fill_none(cand.py, 0.0)
+        cpz = ak.fill_none(cand.pz, 0.0)
+        cp  = np.sqrt(cpx ** 2 + cpy ** 2 + cpz ** 2)
+
+        dot  = cpx * others.px + cpy * others.py + cpz * others.pz
+        mag  = cp * others.p
+        cosA = ak.where(mag > 0, dot / mag, 0.0)
+
+        any_backtoback = ak.to_numpy(ak.fill_none(ak.any(cosA < -0.99, axis=1), False))
+        survives_cosA  = ~any_backtoback
+
+        self.output["n_events_vetoed_cosA"] += int(np.sum(~survives_cosA))
+        self.output["n_numer_cosA"]         += int(np.sum(survives_cosA))
+        self.output["cand_pt_post_cosA"].fill(val=cand_pt_np[survives_cosA])
+
+        # ══════════════════════════════════════════════════════════════════
+        # TIMING VETO  (correctly gated on ndof > 7)
+        #   For events surviving cosA:
+        #     - pick highest-pT retained muon in upper (phi>0) and lower
+        #       (phi<0) hemisphere ("higher/lower-pT dt muon" below refers to
+        #       the pT ordering of these TWO muons, not to the candidate)
+        #     - REQUIRE timeNDof > NDOF_MIN on BOTH before trusting the time
+        #     - dt = t_upper - t_lower ; veto if dt < -20 ns
+        # ══════════════════════════════════════════════════════════════════
+        survives_full = survives_cosA.copy()
+
+        if np.sum(survives_cosA) > 0:
+            mu = muons[ak.Array(survives_cosA)]                 # cosA survivors
+            up = mu[mu.phi > 0]
+            lo = mu[mu.phi < 0]
+            has_both = (ak.num(up) >= 1) & (ak.num(lo) >= 1)    # need a muon in each hemisphere
+
+            if ak.sum(has_both) > 0:
+                up_b = up[has_both]
+                lo_b = lo[has_both]
+                # subsets are slices of the pT-sorted collection -> [:, 0] is highest pT
+                up_lead = up_b[:, 0]
+                lo_lead = lo_b[:, 0]
+
+                self.output["n_events_pair_present"] += int(ak.sum(has_both))
+
+                # ndof on the two Delta-t muons
+                up_ndof = up_lead.timeNDof
+                lo_ndof = lo_lead.timeNDof
+                ndof_ok = (up_ndof > NDOF_MIN) & (lo_ndof > NDOF_MIN)   # both have good timing
+
+                # which of the two hemisphere muons has the higher pT?
+                # (pair-internal ordering only; NOT necessarily the candidate)
+                lead_is_upper = up_lead.pt >= lo_lead.pt
+                lead_ndof = ak.where(lead_is_upper, up_ndof, lo_ndof)
+                sub_ndof  = ak.where(lead_is_upper, lo_ndof, up_ndof)
+
+                self.output["ndof_lead"].fill(val=ak.to_numpy(lead_ndof))
+                self.output["ndof_sub"].fill(val=ak.to_numpy(sub_ndof))
+
+                self.output["n_leadmu_ndof_pass"] += int(ak.sum(lead_ndof > NDOF_MIN))
+                self.output["n_leadmu_ndof_fail"] += int(ak.sum(lead_ndof <= NDOF_MIN))
+                self.output["n_submu_ndof_pass"]  += int(ak.sum(sub_ndof > NDOF_MIN))
+                self.output["n_submu_ndof_fail"]  += int(ak.sum(sub_ndof <= NDOF_MIN))
+
+                # events whose pair is removed from the dt veto because ndof fails
+                self.output["n_events_excluded_ndof"] += int(ak.sum(~ndof_ok))
+
+                # Delta t
+                dt_all = up_lead.timeAtIpInOut - lo_lead.timeAtIpInOut
+
+                # OLD/buggy behaviour: dt < -20 with no ndof requirement
+                self.output["n_dt_veto_no_ndof"] += int(ak.sum(dt_all < -20))
+
+                # CORRECT veto: ndof>7 on both AND dt < -20
+                dt_veto = ndof_ok & (dt_all < -20)
+                self.output["n_events_vetoed_ndof_dt"] += int(ak.sum(dt_veto))
+
+                # Delta t of the events the cut actually acts on (ndof-passing)
+                self.output["dt_ndofpass"].fill(val=ak.to_numpy(dt_all[ndof_ok]))
+
+                # ── Count dt pairs in SIGNED bins (both sides), 25 ns bunch spacing ──
+                _dt = ak.to_numpy(dt_all[ndof_ok])
+                self.output["n_dt_ndofok"]  += int(_dt.size)
+                self.output["n_dt_neg_hi"]  += int(np.sum(_dt < -62.5))
+                self.output["n_dt_neg_50"]  += int(np.sum((_dt >= -62.5) & (_dt < -37.5)))
+                self.output["n_dt_neg_25"]  += int(np.sum((_dt >= -37.5) & (_dt < -12.5)))
+                self.output["n_dt_central"] += int(np.sum((_dt >= -12.5) & (_dt < 12.5)))
+                self.output["n_dt_pos_25"]  += int(np.sum((_dt >= 12.5) & (_dt < 37.5)))
+                self.output["n_dt_pos_50"]  += int(np.sum((_dt >= 37.5) & (_dt < 62.5)))
+                self.output["n_dt_pos_hi"]  += int(np.sum(_dt >= 62.5))
+
+                # ──────────────────────────────────────────────────────────
+                # MUON TYPE (mutually exclusive) of the two dt muons, ONLY for
+                # the events that the dt < -20 ns veto removes.  Under method C
+                # neither dt muon has to be the candidate, so either can be of
+                # any type; "Standalone only" fails Loose ID (isGlobal||isTracker).
+                # ──────────────────────────────────────────────────────────
+                lead_g = _as_bool(ak.where(lead_is_upper, up_lead.isGlobal,     lo_lead.isGlobal))
+                lead_t = _as_bool(ak.where(lead_is_upper, up_lead.isTracker,    lo_lead.isTracker))
+                lead_s = _as_bool(ak.where(lead_is_upper, up_lead.isStandalone, lo_lead.isStandalone))
+                sub_g  = _as_bool(ak.where(lead_is_upper, lo_lead.isGlobal,     up_lead.isGlobal))
+                sub_t  = _as_bool(ak.where(lead_is_upper, lo_lead.isTracker,    up_lead.isTracker))
+                sub_s  = _as_bool(ak.where(lead_is_upper, lo_lead.isStandalone, up_lead.isStandalone))
+
+                # ── 2D timeAtIpInOut: higher-pT (x) vs lower-pT (y) muon of the
+                #    Delta-t pair, split by the LOWER-pT muon's type.  ONLY events
+                #    with ndof > 7 on BOTH dt muons (ndof_ok).
+                lead_time = ak.where(lead_is_upper, up_lead.timeAtIpInOut, lo_lead.timeAtIpInOut)
+                sub_time  = ak.where(lead_is_upper, lo_lead.timeAtIpInOut, up_lead.timeAtIpInOut)
+
+                sub_is_global  = sub_g & ndof_ok
+                sub_is_tracker = sub_t & ~sub_g & ndof_ok
+                sub_is_saonly  = sub_s & ~sub_g & ~sub_t & ndof_ok
+
+                self.output["time_lead_vs_sub_global"].fill(
+                    lead=ak.to_numpy(lead_time[sub_is_global]),
+                    sub =ak.to_numpy(sub_time[sub_is_global]))
+                self.output["time_lead_vs_sub_tracker"].fill(
+                    lead=ak.to_numpy(lead_time[sub_is_tracker]),
+                    sub =ak.to_numpy(sub_time[sub_is_tracker]))
+                self.output["time_lead_vs_sub_standalone"].fill(
+                    lead=ak.to_numpy(lead_time[sub_is_saonly]),
+                    sub =ak.to_numpy(sub_time[sub_is_saonly]))
+
+                # ── Investigative: compare the higher-pT dt muon to the lower-pT
+                #    dt muon, the latter split by its timing. ──
+                lead_pt    = ak.where(lead_is_upper, up_lead.pt,                lo_lead.pt)
+                lead_eta   = ak.where(lead_is_upper, up_lead.eta,               lo_lead.eta)
+                lead_phi   = ak.where(lead_is_upper, up_lead.phi,               lo_lead.phi)
+                lead_dxy   = ak.where(lead_is_upper, up_lead.dxy,               lo_lead.dxy)
+                lead_dz    = ak.where(lead_is_upper, up_lead.dz,                lo_lead.dz)
+                lead_terr  = ak.where(lead_is_upper, up_lead.timeAtIpInOutErr,  lo_lead.timeAtIpInOutErr)
+                lead_dxybs = ak.where(lead_is_upper, up_lead.dxybs,             lo_lead.dxybs)
+
+                sub_pt    = ak.where(lead_is_upper, lo_lead.pt,                up_lead.pt)
+                sub_eta   = ak.where(lead_is_upper, lo_lead.eta,               up_lead.eta)
+                sub_phi   = ak.where(lead_is_upper, lo_lead.phi,               up_lead.phi)
+                sub_dxy   = ak.where(lead_is_upper, lo_lead.dxy,               up_lead.dxy)
+                sub_dz    = ak.where(lead_is_upper, lo_lead.dz,                up_lead.dz)
+                sub_terr  = ak.where(lead_is_upper, lo_lead.timeAtIpInOutErr,  up_lead.timeAtIpInOutErr)
+                sub_dxybs = ak.where(lead_is_upper, lo_lead.dxybs,             up_lead.dxybs)
+
+                sub_intime  = ndof_ok & (np.abs(sub_time) <  12.5)
+                sub_offtime = ndof_ok & (np.abs(sub_time) >= 12.5)
+
+                # lower-pT dt muon time (shows the comb + where the 12.5 ns split sits)
+                self.output["sub_time"].fill(val=ak.to_numpy(sub_time[ndof_ok]))
+
+                # ── Do BOTH legs of the off-time pairs carry inTimeMuon==True? ──
+                up_it = _as_bool(up_lead.inTimeMuon)
+                lo_it = _as_bool(lo_lead.inTimeMuon)
+                self.output["n_offtime_pairs"]       += int(ak.sum(sub_offtime))
+                self.output["n_offtime_both_intime"] += int(ak.sum(sub_offtime & up_it & lo_it))
+
+                # ── timing significance |t/sigma_t| of the off-time lower-pT leg ──
+                sub_sig = np.abs(sub_time) / ak.where(sub_terr > 0, sub_terr, np.nan)
+                self.output["sig_sub_offtime"].fill(val=ak.to_numpy(sub_sig[sub_offtime]))
+                self.output["sig_sub_intime"].fill(val=ak.to_numpy(sub_sig[sub_intime]))
+
+                # ── signed time of the off-time lower-pT leg + (-45, +20) window check ──
+                _sub_t_off = sub_time[sub_offtime]
+                self.output["sub_time_offtime"].fill(val=ak.to_numpy(_sub_t_off))
+                _in_win = (_sub_t_off > -45) & (_sub_t_off < 20)
+                self.output["n_suboff_in_window"]  += int(ak.sum(_in_win))
+                self.output["n_suboff_out_window"] += int(ak.sum(~_in_win))
+
+                # ── OOT-pileup diagnostics on the lower-pT leg, in-time vs off-time ──
+                sub_outin   = ak.where(lead_is_upper, lo_lead.timeAtIpOutIn, up_lead.timeAtIpOutIn)
+                sub_genflav = ak.where(lead_is_upper, lo_lead.genPartFlav,   up_lead.genPartFlav)
+                sub_rpchits = ak.where(lead_is_upper, lo_lead.numberOfValidMuonRPCHits, up_lead.numberOfValidMuonRPCHits)
+                for _tc, _mm in (("in-time", sub_intime), ("off-time", sub_offtime)):
+                    self.output["sub_genflav"].fill(tcat=_tc, val=ak.to_numpy(sub_genflav[_mm]))
+                    self.output["sub_rpchits"].fill(tcat=_tc, val=ak.to_numpy(sub_rpchits[_mm]))
+                    self.output["sub_dxy_io"].fill( tcat=_tc, val=ak.to_numpy(sub_dxy[_mm]))
+                    self.output["sub_inout_vs_outin"].fill(tcat=_tc,
+                        inout=ak.to_numpy(sub_time[_mm]), outin=ak.to_numpy(sub_outin[_mm]))
+                self.output["n_suboff_genflav0"] += int(ak.sum(sub_genflav[sub_offtime] == 0))
+                self.output["n_suboff_norpc"]    += int(ak.sum(sub_rpchits[sub_offtime] == 0))
+
+                # per-variable 3-curve overlay
+                _props = {
+                    "prop_pt":     (lead_pt,    sub_pt),
+                    "prop_eta":    (lead_eta,   sub_eta),
+                    "prop_dxy":    (lead_dxy,   sub_dxy),
+                    "prop_dz":     (lead_dz,    sub_dz),
+                    "prop_dxybs":  (lead_dxybs, sub_dxybs),
+                    "prop_timeErr":(lead_terr,  sub_terr),
+                }
+                for _name, (_la, _sa) in _props.items():
+                    self.output[_name].fill(tcat="higher-pT dt muon",           val=ak.to_numpy(_la[ndof_ok]))
+                    self.output[_name].fill(tcat="lower-pT dt muon (in-time)",  val=ak.to_numpy(_sa[sub_intime]))
+                    self.output[_name].fill(tcat="lower-pT dt muon (out-of-time)", val=ak.to_numpy(_sa[sub_offtime]))
+
+                # cosα(pair): one value per pair, overlaid in-time vs out-of-time
+                _dot_ls = up_lead.px * lo_lead.px + up_lead.py * lo_lead.py + up_lead.pz * lo_lead.pz
+                _mag_ls = up_lead.p * lo_lead.p
+                cosA_ls = ak.where(_mag_ls > 0, _dot_ls / _mag_ls, -2.0)
+                self.output["cosA_lead_sub_by_time"].fill(tcat="in-time",     val=ak.to_numpy(cosA_ls[sub_intime]))
+                self.output["cosA_lead_sub_by_time"].fill(tcat="out-of-time", val=ak.to_numpy(cosA_ls[sub_offtime]))
+
+                # 2D higher-pT vs lower-pT dt muon (eta, pt, phi), split in/out-of-time
+                for _tc, _mm in (("in-time", sub_intime), ("out-of-time", sub_offtime)):
+                    self.output["eta2d_lead_sub"].fill(tcat=_tc, lead=ak.to_numpy(lead_eta[_mm]), sub=ak.to_numpy(sub_eta[_mm]))
+                    self.output["pt2d_lead_sub"].fill( tcat=_tc, lead=ak.to_numpy(lead_pt[_mm]),  sub=ak.to_numpy(sub_pt[_mm]))
+                    self.output["phi2d_lead_sub"].fill(tcat=_tc, lead=ak.to_numpy(lead_phi[_mm]), sub=ak.to_numpy(sub_phi[_mm]))
+                    self.output["sub_eta_vs_terr"].fill(tcat=_tc,
+                        abseta=ak.to_numpy(np.abs(sub_eta[_mm])), terr=ak.to_numpy(sub_terr[_mm]))
+                    self.output["sub_eta_vs_ndof"].fill(tcat=_tc,
+                        abseta=ak.to_numpy(np.abs(sub_eta[_mm])), ndof=ak.to_numpy(sub_ndof[_mm]))
+
+                # restrict to dt-vetoed events
+                lg, lt, ls = lead_g[dt_veto], lead_t[dt_veto], lead_s[dt_veto]
+                sg, st, ss = sub_g[dt_veto],  sub_t[dt_veto],  sub_s[dt_veto]
+
+                # higher-pT dt muon (priority: Global > Tracker-not-global > SA-only > None)
+                self.output["n_dtveto_lead_global"]  += int(ak.sum(lg))
+                self.output["n_dtveto_lead_tracker"] += int(ak.sum(lt & ~lg))
+                self.output["n_dtveto_lead_saonly"]  += int(ak.sum(ls & ~lg & ~lt))
+                self.output["n_dtveto_lead_none"]    += int(ak.sum(~lg & ~lt & ~ls))
+                # lower-pT dt muon
+                self.output["n_dtveto_sub_global"]   += int(ak.sum(sg))
+                self.output["n_dtveto_sub_tracker"]  += int(ak.sum(st & ~sg))
+                self.output["n_dtveto_sub_saonly"]   += int(ak.sum(ss & ~sg & ~st))
+                self.output["n_dtveto_sub_none"]     += int(ak.sum(~sg & ~st & ~ss))
+
+                # map the veto back to the full event array
+                idx_cosA = np.where(survives_cosA)[0]
+                idx_pair = idx_cosA[ak.to_numpy(has_both)]
+                veto_idx = idx_pair[ak.to_numpy(dt_veto)]
+                survives_full[veto_idx] = False
+
+        self.output["n_numer_full"] += int(np.sum(survives_full))
+        self.output["cand_pt_post_full"].fill(val=cand_pt_np[survives_full])
+
+        return self.output
+
+    def postprocess(self, accumulator):
+        return accumulator
+
+
+if __name__ == "__main__":
+    import glob
+    import re
+
+    SAMPLE_DIR = "samples/Signal_Samples"
+    OUTPUT_DIR = "cosA_signal_check_plots_methodC"
+    PREFIX     = "cosA_check_"
+
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    pkl_files = sorted(glob.glob(os.path.join(SAMPLE_DIR, "*_preprocessed.pkl")))
+    print(f"Found {len(pkl_files)} signal samples in {SAMPLE_DIR}/")
+    print("Signal muon = METHOD C candidate: highest-pT DisMuon passing")
+    print("pt>30, |eta|<2.4, mediumId, iso<0.18, 0.1<|dxy|<10; all other")
+    print("DisMuons are retained for the cosmic vetoes.\n")
+
+    executor = processor.FuturesExecutor(workers=8)
+    runner   = processor.Runner(
+        executor=executor,
+        schema=PFNanoAODSchema,
+        chunksize=50_000,
+        skipbadfiles=True,
+    )
+
+    for pkl_path in pkl_files:
+        basename = os.path.basename(pkl_path).replace("_preprocessed.pkl", "")
+
+        match = re.match(r"Stau_(\d+)_(\d+)(mm)", basename)
+        if match:
+            mass, lifetime, unit = match.groups()
+            title_suffix = rf"(Stau {mass} GeV {lifetime} {unit})"
+        else:
+            title_suffix = f"({basename})"
+
+        print(f"\n{'#' * 60}")
+        print(f"  Processing: {basename}")
+        print(f"{'#' * 60}")
+
+        with open(pkl_path, "rb") as f:
+            runnable = pickle.load(f)
+
+        out = runner(
+            runnable,
+            treename="Events",
+            processor_instance=CosASignalCheckProcessor(),
+        )
+
+        denom = out["n_signal_denom"]
+
+        def eff(n):
+            return f"{n / denom * 100:.4f}%" if denom > 0 else "n/a"
+
+        print("\n" + "=" * 64)
+        print(f"  {basename}   [signal muon = method C candidate]")
+        print("=" * 64)
+        print("  EVENT COUNTS")
+        print(f"    1. After signal selection (jet+MET+>=1 mu):  {out['n_after_jetmet_mu']}")
+        print(f"       After method C candidate selection")
+        print(f"       (a DisMuon passes all quality cuts; denom): {denom}")
+        print(f"    2. Candidate events with 2+ retained muons:  {out['n_events_2plus_muons']}"
+              f"   (duplicate tracks removed upstream: {out['n_duplicate_tracks_removed']})")
+        print(f"    3. Vetoed by cosA (cand vs any muon <-0.99): {out['n_events_vetoed_cosA']}   ({eff(out['n_events_vetoed_cosA'])})")
+        print(f"    4. Excluded from dt veto by ndof<=7:         {out['n_events_excluded_ndof']}")
+        print(f"    5. Vetoed by ndof>7 AND dt<-20 ns:           {out['n_events_vetoed_ndof_dt']}   ({eff(out['n_events_vetoed_ndof_dt'])})")
+        print()
+        print("  IS IT NDOF OR DELTA-t THAT HURTS?  (events with an upper+lower pair)")
+        print(f"    Pair-present events (post-cosA):             {out['n_events_pair_present']}")
+        print(f"    dt < -20 ignoring ndof (OLD/buggy behaviour): {out['n_dt_veto_no_ndof']}")
+        print(f"    dt < -20 WITH ndof>7 required (correct):      {out['n_events_vetoed_ndof_dt']}")
+        print(f"    -> events SAVED by requiring ndof>7:          {out['n_dt_veto_no_ndof'] - out['n_events_vetoed_ndof_dt']}")
+        print()
+        print("  DOES ndof>7 REMOVE THE HIGHER- OR LOWER-pT DT MUON?  (the two dt muons)")
+        print(f"    Higher-pT dt muon:  pass {out['n_leadmu_ndof_pass']:>6}   fail {out['n_leadmu_ndof_fail']:>6}")
+        print(f"    Lower-pT  dt muon:  pass {out['n_submu_ndof_pass']:>6}   fail {out['n_submu_ndof_fail']:>6}")
+        print()
+        print("  MUON TYPE IN dt-VETOED EVENTS  (mutually exclusive; one muon per event per row)")
+        print(f"    {'':22}{'Global':>9}{'Trk(noG)':>10}{'SA-only':>9}{'None':>7}")
+        print(f"    {'Higher-pT dt muon':22}"
+              f"{out['n_dtveto_lead_global']:>9}{out['n_dtveto_lead_tracker']:>10}"
+              f"{out['n_dtveto_lead_saonly']:>9}{out['n_dtveto_lead_none']:>7}")
+        print(f"    {'Lower-pT dt muon':22}"
+              f"{out['n_dtveto_sub_global']:>9}{out['n_dtveto_sub_tracker']:>10}"
+              f"{out['n_dtveto_sub_saonly']:>9}{out['n_dtveto_sub_none']:>7}")
+        print("    (SA-only = isStandalone & !isGlobal & !isTracker -> FAILS Loose ID = isGlobal||isTracker)")
+        print()
+        print("  EFFICIENCY (numer / denom)")
+        print(f"    Survive cosA:                 {eff(out['n_numer_cosA'])}")
+        print(f"    Survive cosA + ndof + dt:     {eff(out['n_numer_full'])}")
+        print()
+        print("  inTimeMuon CROSS-CHECK ON OFF-TIME PAIRS  (|dt| >= 12.5 ns, ndof>7)")
+        n_off = out["n_offtime_pairs"]
+        n_off_it = out["n_offtime_both_intime"]
+        frac = f"{n_off_it / n_off * 100:.2f}%" if n_off > 0 else "n/a"
+        print(f"    Off-time pairs:                              {n_off}")
+        print(f"    ... with BOTH legs inTimeMuon==True:         {n_off_it}  ({frac})")
+        print(f"    (~100% => survivors are 2 in-time-flagged legs whose central")
+        print(f"     timeAtIpInOut DIFFERENCE is off-time; not a leak past the cut)")
+        n_iw = out["n_suboff_in_window"]; n_ow = out["n_suboff_out_window"]
+        n_w = n_iw + n_ow
+        fw = f"{n_ow / n_w * 100:.2f}%" if n_w > 0 else "n/a"
+        print(f"    -- off-time lower-pT leg's OWN time vs inTimeMuon CMB window (-45,+20) --")
+        print(f"    timeAtIpInOut inside  (-45,+20) ns:          {n_iw}   (CMB window kept it)")
+        print(f"    timeAtIpInOut OUTSIDE (-45,+20) ns:          {n_ow}  ({fw}; inTimeMuon=True only via RPC=BX0)")
+        n_g0 = out["n_suboff_genflav0"]; n_nr = out["n_suboff_norpc"]
+        fg = f"{n_g0 / n_off * 100:.2f}%" if n_off > 0 else "n/a"
+        fr = f"{n_nr / n_off * 100:.2f}%" if n_off > 0 else "n/a"
+        print(f"    -- are the off-time lower-pT legs real signal muons or pileup? --")
+        print(f"    genPartFlav==0 (unmatched -> pileup/fake):   {n_g0}  ({fg})")
+        print(f"    0 valid RPC hits (escapes inTimeMuon via CMB): {n_nr}  ({fr})")
+        print("=" * 64 + "\n")
+
+        # ── dt (upper - lower) for ndof>7 pairs: signed distribution, both sides ──
+        n_dt_tot = out["n_dt_ndofok"]
+        def _pct(n):
+            return f"{n / n_dt_tot * 100:.2f}%" if n_dt_tot > 0 else "n/a"
+        n_gen = out["n_gen_signal"]
+        n_sig = out["n_signal_denom"]          # events after the full signal selection (= eff() denom)
+        def _pden(n):
+            return f"{n / n_sig * 100:.4f}%" if n_sig > 0 else "n/a"
+        n_neg = out["n_dt_neg_hi"] + out["n_dt_neg_50"] + out["n_dt_neg_25"]
+        n_pos = out["n_dt_pos_25"] + out["n_dt_pos_50"] + out["n_dt_pos_hi"]
+        print("  dt (upper - lower) for ndof>7 pairs: signed distribution (bunch spacing = 25 ns)")
+        print(f"    gen mu+tau events (acceptance ref):  {n_gen}")
+        print(f"    signal-selected events (denom):      {n_sig}")
+        print(f"    total ndof>7 pairs:                  {n_dt_tot}  ({_pden(n_dt_tot)} of denom)")
+        print(f"    dt < -62.5 ns:                       {out['n_dt_neg_hi']}  ({_pct(out['n_dt_neg_hi'])} of pairs)")
+        print(f"    -62.5 to -37.5 ns  (~ -50):          {out['n_dt_neg_50']}  ({_pct(out['n_dt_neg_50'])} of pairs)")
+        print(f"    -37.5 to -12.5 ns  (~ -25):          {out['n_dt_neg_25']}  ({_pct(out['n_dt_neg_25'])} of pairs)")
+        print(f"    -12.5 to +12.5 ns  (in-time, ~0):    {out['n_dt_central']}  ({_pct(out['n_dt_central'])} of pairs)")
+        print(f"    +12.5 to +37.5 ns  (~ +25):          {out['n_dt_pos_25']}  ({_pct(out['n_dt_pos_25'])} of pairs)")
+        print(f"    +37.5 to +62.5 ns  (~ +50):          {out['n_dt_pos_50']}  ({_pct(out['n_dt_pos_50'])} of pairs)")
+        print(f"    dt > +62.5 ns:                       {out['n_dt_pos_hi']}  ({_pct(out['n_dt_pos_hi'])} of pairs)")
+        print(f"    -- summary --")
+        print(f"    in-time  (|dt| < 12.5 ns):           {out['n_dt_central']}  ({_pct(out['n_dt_central'])} of pairs)")
+        print(f"    negative side (dt < -12.5 ns):       {n_neg}  ({_pct(n_neg)} of pairs)")
+        print(f"    positive side (dt > +12.5 ns):       {n_pos}  ({_pct(n_pos)} of pairs)")
+        print(f"  relative to signal-selected events (denom = {n_sig}):")
+        print(f"    in-time / denom:                     {out['n_dt_central']}/{n_sig} = {_pden(out['n_dt_central'])}")
+        print(f"    negative side / denom:               {n_neg}/{n_sig} = {_pden(n_neg)}")
+        print(f"    positive side / denom:               {n_pos}/{n_sig} = {_pden(n_pos)}")
+        print("=" * 64 + "\n")
+
+        # ── Efficiency vs candidate pT ──
+        plot_cosA_efficiency(
+            out["cand_pt_all"], out["cand_pt_post_cosA"],
+            OUTPUT_DIR, PREFIX, title_suffix, basename + "_cosA",
+            title=r"$\cos\alpha < -0.99$ veto efficiency",
+        )
+        plot_cosA_efficiency(
+            out["cand_pt_all"], out["cand_pt_post_full"],
+            OUTPUT_DIR, PREFIX, title_suffix, basename + "_full",
+            title=r"$\cos\alpha$ + (ndof>7 & $\Delta t<-20$) efficiency",
+        )
+
+        # ── ndof of the two dt muons (higher- vs lower-pT of the pair) ──
+        plot_ndof_lead_sub(
+            out["ndof_lead"], out["ndof_sub"],
+            OUTPUT_DIR, PREFIX, title_suffix, basename,
+        )
+
+        # ── Delta t of ndof-passing events ──
+        plot_dt(
+            out["dt_ndofpass"],
+            OUTPUT_DIR, PREFIX, title_suffix, basename,
+        )
+
+        # ── Muon type of the two dt muons, ONLY for dt-vetoed events ──
+        plot_dtveto_muon_types(
+            [out["n_dtveto_lead_global"], out["n_dtveto_lead_tracker"],
+             out["n_dtveto_lead_saonly"], out["n_dtveto_lead_none"]],
+            [out["n_dtveto_sub_global"], out["n_dtveto_sub_tracker"],
+             out["n_dtveto_sub_saonly"], out["n_dtveto_sub_none"]],
+            OUTPUT_DIR, PREFIX, title_suffix, basename,
+        )
+
+        # ── 2D timeAtIpInOut: split by lower-pT dt muon type ──
+        plot_time2d(out["time_lead_vs_sub_global"],
+                    r"dt-pair timeAtIpInOut — lower-pT muon GLOBAL " + title_suffix,
+                    OUTPUT_DIR, PREFIX, basename + "_subGlobal")
+        plot_time2d(out["time_lead_vs_sub_tracker"],
+                    r"dt-pair timeAtIpInOut — lower-pT muon TRACKER (not global) " + title_suffix,
+                    OUTPUT_DIR, PREFIX, basename + "_subTracker")
+        plot_time2d(out["time_lead_vs_sub_standalone"],
+                    r"dt-pair timeAtIpInOut — lower-pT muon STANDALONE-only " + title_suffix,
+                    OUTPUT_DIR, PREFIX, basename + "_subStandalone")
+
+        # ── Lower-pT dt muon timeAtIpInOut (ndof>7): shows the 25 ns comb ──
+        plot_sub_time(out["sub_time"], OUTPUT_DIR, PREFIX, basename + "_sub_time",
+                      "Lower-pT dt muon timeAtIpInOut " + title_suffix)
+
+        # ── Per-variable overlay ──
+        for _var, _tag in (("prop_pt", "pt"), ("prop_eta", "eta"), ("prop_dxy", "dxy"),
+                           ("prop_dz", "dz"), ("prop_dxybs", "dxybs"), ("prop_timeErr", "timeErr")):
+            plot_sub_overlay(out[_var], OUTPUT_DIR, PREFIX, basename + "_" + _tag,
+                             "dt-pair muons in/out-of-time " + title_suffix)
+
+        # ── cosα(pair), in-time vs out-of-time ──
+        plot_sub_overlay(out["cosA_lead_sub_by_time"], OUTPUT_DIR, PREFIX,
+                         basename + "_cosA_lead_sub",
+                         r"$\cos\alpha$(dt pair): in-time vs out-of-time " + title_suffix)
+
+        # ── 2D dt-pair (eta, pt, phi), split by in/out-of-time ──
+        plot_2d_by_time(out["eta2d_lead_sub"], OUTPUT_DIR, PREFIX, basename + "_eta2d",
+                        "dt-pair eta " + title_suffix)
+        plot_2d_by_time(out["pt2d_lead_sub"],  OUTPUT_DIR, PREFIX, basename + "_pt2d",
+                        "dt-pair pT " + title_suffix)
+        plot_2d_by_time(out["phi2d_lead_sub"], OUTPUT_DIR, PREFIX, basename + "_phi2d",
+                        "dt-pair phi " + title_suffix)
+
+        # ── Unifying check: lower-pT |eta| vs timing resolution / ndof ──
+        plot_2d_by_time(out["sub_eta_vs_terr"], OUTPUT_DIR, PREFIX, basename + "_sub_eta_vs_terr",
+                        "Lower-pT dt muon |eta| vs timeAtIpInOutErr " + title_suffix)
+        plot_2d_by_time(out["sub_eta_vs_ndof"], OUTPUT_DIR, PREFIX, basename + "_sub_eta_vs_ndof",
+                        "Lower-pT dt muon |eta| vs timeNDof " + title_suffix)
+
+        # ── timing significance |t/sigma_t| of the off-time lower-pT leg ──
+        if np.sum(out["sig_sub_offtime"].values()) > 0:
+            fig, ax = plt.subplots(figsize=(8, 6))
+            edges = out["sig_sub_offtime"].axes["val"].edges
+            ax.step(edges[:-1], out["sig_sub_offtime"].values(), where="post", color="purple")
+            ax.axvline(3.0, color="red", ls="--", label=r"$|t/\sigma_t| = 3$")
+            ax.set_xlabel(out["sig_sub_offtime"].axes["val"].label)
+            ax.set_ylabel("Off-time lower-pT dt muons / bin")
+            ax.set_title("Off-time lower-pT dt muon timing significance " + title_suffix)
+            ax.legend()
+            outpath = os.path.join(OUTPUT_DIR, f"{PREFIX}{basename}_sig_sub_offtime.pdf")
+            fig.savefig(outpath, bbox_inches="tight")
+            plt.close(fig)
+            print(f"    Saved off-time significance plot: {outpath}")
+
+        # ── SIGNED timeAtIpInOut of off-time lower-pT legs vs inTimeMuon window ──
+        if np.sum(out["sub_time_offtime"].values()) > 0:
+            fig, ax = plt.subplots(figsize=(8, 6))
+            edges = out["sub_time_offtime"].axes["val"].edges
+            ax.step(edges[:-1], out["sub_time_offtime"].values(), where="post", color="darkblue")
+            ax.axvline(-45, color="red", ls="--", label="inTimeMuon CMB window (-45, +20) ns")
+            ax.axvline(+20, color="red", ls="--")
+            ax.axvline(-12.5, color="gray", ls=":", alpha=0.6, label="|t| = 12.5 ns (in-time, excluded)")
+            ax.axvline(+12.5, color="gray", ls=":", alpha=0.6)
+            ax.set_xlabel(out["sub_time_offtime"].axes["val"].label)
+            ax.set_ylabel("Off-time lower-pT dt muons / bin")
+            ax.set_title("Off-time lower-pT dt muon time vs inTimeMuon window " + title_suffix)
+            ax.legend()
+            outpath = os.path.join(OUTPUT_DIR, f"{PREFIX}{basename}_sub_time_offtime_window.pdf")
+            fig.savefig(outpath, bbox_inches="tight")
+            plt.close(fig)
+            print(f"    Saved off-time time-vs-window plot: {outpath}")
+
+        # ── significance overlay: in-time vs off-time lower-pT legs (normalized) ──
+        if (np.sum(out["sig_sub_intime"].values()) + np.sum(out["sig_sub_offtime"].values())) > 0:
+            fig, ax = plt.subplots(figsize=(8, 6))
+            edges = out["sig_sub_offtime"].axes["val"].edges
+            for key, lab, col in [("sig_sub_intime",  "in-time (|t| < 12.5 ns)",   "C0"),
+                                  ("sig_sub_offtime", "off-time (|t| >= 12.5 ns)", "C1")]:
+                vals = out[key].values(); tot = vals.sum()
+                if tot > 0:
+                    ax.step(edges[:-1], vals / tot, where="post", color=col,
+                            label=f"{lab}  (N={int(tot)})")
+            ax.axvline(3.0, color="red", ls="--", label=r"$|t/\sigma_t| = 3$")
+            ax.set_xlabel(r"$|t/\sigma_t|$ of lower-pT dt muon")
+            ax.set_ylabel("Fraction of muons / bin")
+            ax.set_title("Lower-pT dt muon timing significance: in-time vs off-time " + title_suffix)
+            ax.legend()
+            outpath = os.path.join(OUTPUT_DIR, f"{PREFIX}{basename}_sig_sub_intime_vs_offtime.pdf")
+            fig.savefig(outpath, bbox_inches="tight")
+            plt.close(fig)
+            print(f"    Saved significance comparison plot: {outpath}")
+
+        # ── OOT-pileup diagnostics: in-time vs off-time lower-pT leg ──
+        for _v, _t in (("sub_genflav", "genflav"), ("sub_rpchits", "rpchits"), ("sub_dxy_io", "dxy")):
+            plot_sub_overlay(out[_v], OUTPUT_DIR, PREFIX, basename + "_sub_" + _t,
+                             "lower-pT dt muon: in-time vs off-time " + title_suffix)
+        plot_2d_by_time(out["sub_inout_vs_outin"], OUTPUT_DIR, PREFIX,
+                        basename + "_sub_inout_vs_outin",
+                        "Lower-pT dt muon timeAtIpInOut vs timeAtIpOutIn " + title_suffix)
+
+        # ── Standard Muon genPartFlav (DisMuon-vs-Muon gen-matching cross-check) ──
+        mg = out["muon_genflav"].values()
+        tot_m = mg.sum()
+        if tot_m > 0:
+            nz_m = tot_m - mg[0]   # first bin = genPartFlav==0
+            print(f"  STANDARD Muon gen-match (signal events): "
+                  f"{int(nz_m)}/{int(tot_m)} = {nz_m/tot_m*100:.1f}% have genPartFlav != 0")
+            fig, ax = plt.subplots(figsize=(8, 6))
+            edges = out["muon_genflav"].axes["val"].edges
+            ax.step(edges[:-1], mg, where="post", color="teal")
+            ax.set_xlabel(out["muon_genflav"].axes["val"].label)
+            ax.set_ylabel("Standard Muons / bin")
+            ax.set_title("Standard Muon genPartFlav " + title_suffix)
+            outpath = os.path.join(OUTPUT_DIR, f"{PREFIX}{basename}_muon_genflav.pdf")
+            fig.savefig(outpath, bbox_inches="tight")
+            plt.close(fig)
+            print(f"    Saved standard-Muon genPartFlav plot: {outpath}")
+
+        if np.sum(out["time_all"].values()) > 0:
+            fig, ax = plt.subplots(figsize=(9, 6))
+            edges = out["time_all"].axes["val"].edges
+            ax.step(edges[:-1], out["time_all"].values(), where="post", color="black")
+            ax.set_yscale("log")
+            for t in (-50, -25, 25, 50):
+                ax.axvline(t, color="gray", ls=":", alpha=0.6)
+            ax.axvspan(-45, 20, color="green", alpha=0.10, label="inTimeMuon keeps (~ -45 to +20 ns)")
+            ax.axvline(-45, color="green", ls="--", alpha=0.8)
+            ax.axvline(+20, color="green", ls="--", alpha=0.8)
+            ax.set_xlabel(out["time_all"].axes["val"].label)
+            ax.set_ylabel("DisMuons / (2 ns)")
+            ax.set_title("All retained DisMuon timeAtIpInOut — NO inTimeMuon selector " + title_suffix)
+            ax.legend()
+            outpath = os.path.join(OUTPUT_DIR, f"{PREFIX}{basename}_time_all_noITM.pdf")
+            fig.savefig(outpath, bbox_inches="tight")
+            plt.close(fig)
+            print(f"    Saved all-muon timeAtIpInOut plot: {outpath}")
+
+    print("\nAll samples done!")
