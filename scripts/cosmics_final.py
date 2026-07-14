@@ -136,13 +136,13 @@ def save_time_overlay(h, sel, PREFIX, OUTPUT_DIR, title_suffix="", normalize=Tru
 
 class SingleMuonProcessor(processor.ProcessorABC):
     def __init__(self):
-        self.output = {        
+        self.output = {
             "n_events_initial": 0,
             "n_events_total_cosmic": 0,
             "n_events_total_nobptx": 0,
             "n_evt_single_mu_raw_cosmic": 0,
             "n_evt_single_mu_raw_nobptx": 0,
-            # NoBPTX events containing a lead-based duplicate (INFO ONLY — no longer vetoed;
+            # NoBPTX events containing a candidate-based duplicate (INFO ONLY — no longer vetoed;
             # duplicates now go through the outertrack/segment cutflow like cosmic MC)
             "n_events_with_dup_nobptx": 0,
 
@@ -163,7 +163,7 @@ class SingleMuonProcessor(processor.ProcessorABC):
             "dup_surv_rows_cosmic": [],
             "dup_surv_rows_nobptx": [],
 
-            # ── single-muon events: pass lead kinematics + quality but have exactly 1
+            # ── single-muon events: pass method C candidate cuts but have exactly 1
             #    DisMuon, so they never enter the dup/cosA/dt cutflow ──
             "n_evt_single_mu_cosmic": 0,
             "n_evt_single_mu_nobptx": 0,
@@ -172,8 +172,8 @@ class SingleMuonProcessor(processor.ProcessorABC):
             "n_evt_enter_cosmic": 0, "n_evt_after_dup_cosmic": 0, "n_evt_after_cosA_cosmic": 0, "n_evt_after_dt_cosmic": 0,
             "n_evt_enter_nobptx": 0, "n_evt_after_dup_nobptx": 0, "n_evt_after_cosA_nobptx": 0, "n_evt_after_dt_nobptx": 0,
 
-            # ── inTimeMuon-on-sub-leading study: original >=2mu count, and how many of
-            #    those collapse to lead-only once out-of-time sub-leadings are dropped ──
+            # ── inTimeMuon-on-non-candidate study: original >=2mu count, and how many of
+            #    those collapse to candidate-only once out-of-time partners are dropped ──
             "n_evt_ge2_orig_cosmic": 0, "n_evt_itm_to_1mu_cosmic": 0,
             "n_evt_ge2_orig_nobptx": 0, "n_evt_itm_to_1mu_nobptx": 0,
 
@@ -198,7 +198,7 @@ class SingleMuonProcessor(processor.ProcessorABC):
             # ── cosA cutflow histograms ──
             "cosA_study_lead_vs_sub": Hist(
                 axis.StrCategory([], name="cat", growth=True),
-                axis.Regular(200, -1.01, 1.0, name="val", label=r"$\cos\alpha$ (Lead vs Each Sub-leading)")
+                axis.Regular(200, -1.01, 1.0, name="val", label=r"$\cos\alpha$ (Candidate vs Each Retained Muon)")
             ),
             "cosA_study_surviving_mult": Hist(
                 axis.StrCategory([], name="cat", growth=True),
@@ -222,19 +222,6 @@ class SingleMuonProcessor(processor.ProcessorABC):
                 axis.Regular(300, -300, 300, name="val", label=r"DisMuon timeAtIpInOut [ns]"),
             ),
         }
-        # ── collinear (non-duplicate) study counters: 3 thresholds × 2 datasets ──
-        #    Pairs that FAIL the duplicate box but have inner-track cos_ab > threshold.
-        #    Thresholds are cumulative (0.90 set ⊇ 0.95 set ⊇ 0.99 set).
-        for _pfx in ("cosmic", "nobptx"):
-            for _thr in ("99", "95", "90"):
-                self.output[f"n_coll_pairs_total_{_pfx}_{_thr}"]     = 0
-                self.output[f"n_coll_removed_outer_{_pfx}_{_thr}"]   = 0
-                self.output[f"n_coll_removed_seg_{_pfx}_{_thr}"]     = 0
-                self.output[f"n_coll_pairs_surviving_{_pfx}_{_thr}"] = 0
-                self.output[f"n_evt_coll_{_pfx}_{_thr}"]             = 0
-                self.output[f"n_evt_coll_removed_{_pfx}_{_thr}"]     = 0
-        self.output["coll_rows_cosmic"] = []
-        self.output["coll_rows_nobptx"] = []        
 
     def process(self, events):
         dataset = events.metadata.get("dataset", "Unknown")
@@ -280,7 +267,7 @@ class SingleMuonProcessor(processor.ProcessorABC):
             "pfRelIso03_all": events.DisMuon.pfRelIso03_all,
             "eta_at_mb2": events.DisMuon.eta_at_mb2,
             "phi_at_mb2": events.DisMuon.phi_at_mb2,
-            "inTimeMuon": events.DisMuon.inTimeMuon,   # carried so we can require it on sub-leadings
+            "inTimeMuon": events.DisMuon.inTimeMuon,   # carried so we can require it on non-candidates
         }
         if is_cosmic or is_nobptx:
             dismuon_fields["outertrack_pt"]  = events.DisMuon.outertrack_pt
@@ -346,14 +333,39 @@ class SingleMuonProcessor(processor.ProcessorABC):
             )
             events = events[signal_gen_mask]
 
-        # ── Apply pt/eta to the LEADING (highest-pT) DisMuon only (all datasets) ──
+        # ══════════════════════════════════════════════════════════════════
+        # METHOD C CANDIDATE SELECTION (all datasets)
+        #   Every muon is tested against ALL quality cuts per-muon:
+        #       pt > 30, |eta| < 2.4, mediumId, pfRelIso03_all < 0.18
+        #       (signal only: 0.1 < |dxy| < 10 cm as well).
+        #   The CANDIDATE is the highest-pT muon that passes — it need NOT be
+        #   the highest-pT muon of the event. Every other muon is RETAINED
+        #   with no cuts. The muon list is reordered so the CANDIDATE IS
+        #   ALWAYS INDEX 0 (partners follow in pT order); events without a
+        #   candidate get an empty DisMuon list and are dropped downstream.
+        # ══════════════════════════════════════════════════════════════════
         sorted_all_kin = events.DisMuon[ak.argsort(events.DisMuon.pt, axis=1, ascending=False)]
-        lead_all_kin = ak.firsts(sorted_all_kin)
-        lead_passes_kin = ak.fill_none(
-            (lead_all_kin.pt > 30) & (abs(lead_all_kin.eta) < 2.4), False
+        pass_all_kin = (
+            (sorted_all_kin.pt > 30) &
+            (abs(sorted_all_kin.eta) < 2.4) &
+            (sorted_all_kin.mediumId == True) &
+            (sorted_all_kin.pfRelIso03_all < 0.18)
         )
-        keep_per_muon_kin, _ = ak.broadcast_arrays(lead_passes_kin, sorted_all_kin.pt)
-        events["DisMuon"] = sorted_all_kin[keep_per_muon_kin]
+        if is_signal:
+            pass_all_kin = pass_all_kin & (abs(sorted_all_kin.dxy) > 0.1) & (abs(sorted_all_kin.dxy) < 10)
+        li_kin = ak.local_index(sorted_all_kin.pt, axis=1)
+        cand_idx_kin = ak.firsts(li_kin[pass_all_kin])      # per-event index of the candidate; None if no muon passes
+        has_cand_kin = ~ak.is_none(cand_idx_kin)
+        # candidate-first reorder: [candidate] + the remaining muons in pT order.
+        # ak.singletons -> [] for no-candidate events, so their order is the identity
+        # (they are emptied by the keep mask right after anyway).
+        order_kin = ak.concatenate(
+            [ak.singletons(cand_idx_kin),
+             li_kin[li_kin != ak.fill_none(cand_idx_kin, -1)]],
+            axis=1)
+        reordered_kin = sorted_all_kin[order_kin]
+        keep_per_muon_kin, _ = ak.broadcast_arrays(has_cand_kin, reordered_kin.pt)
+        events["DisMuon"] = reordered_kin[keep_per_muon_kin]
 
         dis_muons = events.DisMuon
         n_dismuons = ak.num(dis_muons)
@@ -403,19 +415,16 @@ class SingleMuonProcessor(processor.ProcessorABC):
             events = events[mask_has_muons_g]
             dis_muons = dis_muons[mask_has_muons_g]
 
-            sorted_all = dis_muons[ak.argsort(dis_muons.pt, axis=1, ascending=False)]
-            lead_all = sorted_all[:, 0]
-
-            lead_quality_mask_g = (lead_all.mediumId == True) & (lead_all.pfRelIso03_all < 0.18)
-            if is_signal:
-                lead_quality_mask_g = lead_quality_mask_g & (abs(lead_all.dxy) > 0.1) & (abs(lead_all.dxy) < 10)
-            events = events[lead_quality_mask_g]
-            sorted_all = sorted_all[lead_quality_mask_g]
-            dis_muons = sorted_all
+            # METHOD C: dis_muons is already CANDIDATE-FIRST (index 0 = candidate, which
+            # passed pt/eta/mediumId/iso[/dxy] per-muon). Do NOT re-sort by pT here —
+            # that would demote a candidate that is not the overall-highest-pT muon —
+            # and no further lead-quality gate is needed: events without a candidate
+            # were already dropped at the method C selection.
+            sorted_all = dis_muons
             dis_muons_full = sorted_all      # cosmic + nobptx keep duplicates; overridden below for signal
 
             if len(events) > 0:
-                lead_for_dup = sorted_all[:, 0]
+                lead_for_dup = sorted_all[:, 0]   # = the method C candidate
                 deta_g = sorted_all.eta - lead_for_dup.eta
                 dphi_g = sorted_all.delta_phi(lead_for_dup)
                 mask_sc_g = (sorted_all.charge * lead_for_dup.charge) > 0
@@ -427,7 +436,7 @@ class SingleMuonProcessor(processor.ProcessorABC):
                     # De-duplicate dis_muons for ancillary studies; keep the full
                     # (duplicate-retaining) dis_muons_full for the outertrack/segment cutflow.
                     if is_nobptx:
-                        # info only: how many NoBPTX events contain a lead-based duplicate
+                        # info only: how many NoBPTX events contain a candidate-based duplicate
                         self.output["n_events_with_dup_nobptx"] += int(ak.sum(ak.any(is_duplicate_g, axis=1)))
                     dis_muons = sorted_all[~is_duplicate_g]
                 else:
@@ -467,20 +476,23 @@ class SingleMuonProcessor(processor.ProcessorABC):
 
         # ==========================================
         # COSMIC / NoBPTX cosmic-removal CUTFLOW  (>= 2 muons; all pairs considered)
-        #   NEW pre-step: require inTimeMuon==True on every SUB-LEADING muon (lead kept),
-        #       applied BEFORE [1]/[2]/[3]. Events left with only the lead survive.
+        #   METHOD C: index 0 = the candidate (passed all quality cuts); all other
+        #   muons are retained partners with no cuts.
+        #   Pre-step: require inTimeMuon==True on every NON-CANDIDATE muon (candidate
+        #       kept), applied BEFORE [1]/[2]/[3]. Events left with only the candidate
+        #       survive.
         #   [1] duplicate removal (outertrack cosA < -0.8, then segment cosA < -0.8)
-        #   [2] standard cosA < -0.99 (lead vs each sub-leading)
+        #   [2] standard cosA < -0.99 (candidate vs each retained muon)
         #   [3] dt < -20 ns (ndof > 7 on the two upper/lower leaders ONLY)
         #   Single-muon events never enter this cutflow — counted separately.
         # ==========================================
         if is_cosmic or is_nobptx:
             prefix_cs = "cosmic" if is_cosmic else "nobptx"
-            src = dis_muons_full   # duplicate-retaining, pt-sorted, lead quality applied
+            src = dis_muons_full   # duplicate-retaining, CANDIDATE-FIRST (method C applied)
 
             n_mu_src = ak.num(src)
-            # single-muon events: untouched (lead already has pt/eta/mediumId/iso);
-            # no inTimeMuon requirement is placed on them.
+            # single-muon events: untouched (that muon IS the candidate and already
+            # passed pt/eta/mediumId/iso); no inTimeMuon requirement is placed on them.
             self.output[f"n_evt_single_mu_{prefix_cs}"] += int(ak.sum(n_mu_src == 1))
             self.output["time_at_ip"].fill(
                 cat=ds_label, sel="1mu",
@@ -502,15 +514,15 @@ class SingleMuonProcessor(processor.ProcessorABC):
                 self.output["time_at_ip"].fill(cat=ds_label, sel="2mu_lower",
                                                val=ak.flatten(cs_orig[cs_orig.phi < 0].timeAtIpInOut))
 
-            # ── NEW: require inTimeMuon==True on SUB-LEADING muons (pt-rank > 0);
-            #    the leading muon (rank 0) is always kept with cuts (a)-(d) only. ──
+            # ── require inTimeMuon==True on NON-CANDIDATE muons (index > 0);
+            #    the candidate (index 0) is always kept with the method C cuts only. ──
             idx = ak.local_index(cs_orig, axis=1)
             keep_itm = (idx == 0) | (cs_orig.inTimeMuon == True)
             cs_itm = cs_orig[keep_itm]
             n_after_itm = ak.num(cs_itm)
 
-            # >=2mu events whose sub-leadings are ALL out-of-time collapse to lead-only:
-            # no partner remains, so the veto cannot fire -> they SURVIVE.
+            # >=2mu events whose non-candidates are ALL out-of-time collapse to
+            # candidate-only: no partner remains, so the veto cannot fire -> they SURVIVE.
             drop_to_1 = (n_after_itm == 1)
             self.output[f"n_evt_itm_to_1mu_{prefix_cs}"] += int(ak.sum(drop_to_1))
             if ak.sum(drop_to_1) > 0:
@@ -532,7 +544,6 @@ class SingleMuonProcessor(processor.ProcessorABC):
                 a, b = pr.a, pr.b
                 dup = ((abs(a.eta - b.eta) < 0.01) &
                        (abs(a.delta_phi(b)) < 0.001))
-                cos_ab = _cosA_vec(a, b)   # inner-track opening-angle cosine (collinear study)
 
                 with np.errstate(divide="ignore", invalid="ignore"):
                     oa = _pmvec(a.outertrack_pt, a.outertrack_eta, a.outertrack_phi, a.mass)
@@ -599,66 +610,14 @@ class SingleMuonProcessor(processor.ProcessorABC):
                             int(ans), int(bns), bool(el),
                         ))
 
-                # ── COLLINEAR (non-duplicate) STUDY — DIAGNOSTIC ONLY ──────────────
-                #   Pairs NOT flagged as duplicates but with inner-track cos_ab above a
-                #   threshold. Apply the SAME outertrack/segment back-to-back test used
-                #   for duplicates, at 3 thresholds, to see if the outer track reveals
-                #   them as split back-to-back cosmics. Does NOT feed the veto below.
-                for _thr_val, _thr_tag in ((0.99, "99"), (0.95, "95"), (0.90, "90")):
-                    coll      = (cos_ab > _thr_val) & (~dup)
-                    rem_out_c = coll & elig & (cos_out < -0.8)
-                    rem_seg_c = coll & (~rem_out_c) & (cos_seg < -0.8)
-                    surv_c    = coll & (~rem_out_c) & (~rem_seg_c)
-
-                    self.output[f"n_coll_pairs_total_{prefix_cs}_{_thr_tag}"]     += int(ak.sum(ak.sum(coll, axis=1)))
-                    self.output[f"n_coll_removed_outer_{prefix_cs}_{_thr_tag}"]   += int(ak.sum(ak.sum(rem_out_c, axis=1)))
-                    self.output[f"n_coll_removed_seg_{prefix_cs}_{_thr_tag}"]     += int(ak.sum(ak.sum(rem_seg_c, axis=1)))
-                    self.output[f"n_coll_pairs_surviving_{prefix_cs}_{_thr_tag}"] += int(ak.sum(ak.sum(surv_c, axis=1)))
-                    self.output[f"n_evt_coll_{prefix_cs}_{_thr_tag}"]         += int(ak.sum(ak.any(coll, axis=1)))
-                    self.output[f"n_evt_coll_removed_{prefix_cs}_{_thr_tag}"] += int(ak.sum(ak.any(rem_out_c | rem_seg_c, axis=1)))
-
-                # ── dump every collinear (non-dup) pair above the LOOSEST threshold ──
-                #    (cos_ab > 0.90; filter the cos_ab column for tighter thresholds) ──
-                coll_dump = (cos_ab > 0.90) & (~dup)
-                if ak.any(coll_dump):
-                    run_pc,  _ = ak.broadcast_arrays(ev2.run, a.pt)
-                    lumi_pc, _ = ak.broadcast_arrays(ev2.luminosityBlock, a.pt)
-                    evt_pc,  _ = ak.broadcast_arrays(ev2.event, a.pt)
-
-                    def _flat_coll(x):
-                        return ak.to_numpy(ak.flatten(x[coll_dump], axis=1))
-
-                    _cols_c = [
-                        _flat_coll(run_pc), _flat_coll(lumi_pc), _flat_coll(evt_pc),
-                        _flat_coll(cos_ab),
-                        _flat_coll(a.pt), _flat_coll(a.eta), _flat_coll(a.phi),
-                        _flat_coll(b.pt), _flat_coll(b.eta), _flat_coll(b.phi),
-                        _flat_coll(cos_out), _flat_coll(cos_seg),
-                        _flat_coll(a.outertrack_pt), _flat_coll(a.outertrack_eta), _flat_coll(a.outertrack_phi),
-                        _flat_coll(b.outertrack_pt), _flat_coll(b.outertrack_eta), _flat_coll(b.outertrack_phi),
-                        _flat_coll(a.nSeg), _flat_coll(b.nSeg), _flat_coll(elig),
-                    ]
-                    for (rr, ll, ee, cab, apt, aeta, aphi, bpt, beta, bphi,
-                         co, csg, aopt, aoeta, aophi, bopt, boeta, bophi, ans, bns, el) in zip(*_cols_c):
-                        self.output[f"coll_rows_{prefix_cs}"].append((
-                            int(rr), int(ll), int(ee), float(cab),
-                            float(apt), float(aeta), float(aphi),
-                            float(bpt), float(beta), float(bphi),
-                            float(co), float(csg),
-                            float(aopt), float(aoeta), float(aophi),
-                            float(bopt), float(boeta), float(bophi),
-                            int(ans), int(bns), bool(el),
-                        ))
-
-
                 ev_veto_dup = ak.any(rem_out | rem_seg, axis=1)
 
                 cs_dup = cs[~ev_veto_dup]
                 self.output[f"n_evt_after_dup_{prefix_cs}"] += len(cs_dup)
 
-                # ── STAGE 2: standard cosA < -0.99 (lead vs each sub) ──
+                # ── STAGE 2: standard cosA < -0.99 (candidate vs each retained muon) ──
                 if len(cs_dup) > 0:
-                    lead2 = cs_dup[:, 0]
+                    lead2 = cs_dup[:, 0]     # = the method C candidate
                     sub2  = cs_dup[:, 1:]
                     dot = lead2.px*sub2.px + lead2.py*sub2.py + lead2.pz*sub2.pz
                     den = lead2.p * sub2.p
@@ -707,19 +666,13 @@ class SingleMuonProcessor(processor.ProcessorABC):
         if is_signal:
             sig_mask = (n_dismuons >= 2)
             if ak.sum(sig_mask) > 0:
-                sig_muons = dis_muons[sig_mask]
-                sig_sorted = sig_muons[ak.argsort(sig_muons.pt, axis=1, ascending=False)]
-                sig_lead = sig_sorted[:, 0]
-                sig_lead_pass = (
-                    (sig_lead.mediumId == True) &
-                    (sig_lead.pfRelIso03_all < 0.18) &
-                    (abs(sig_lead.dxy) > 0.1) &
-                    (abs(sig_lead.dxy) < 10)
-                )
-                sig_sorted = sig_sorted[sig_lead_pass]
+                # METHOD C: index 0 is the candidate and already passed
+                # pt/eta/mediumId/iso/dxy — keep candidate-first order
+                # (no pT re-sort, no quality re-check).
+                sig_sorted = dis_muons[sig_mask]
 
                 if len(sig_sorted) > 0:
-                    sig_lead = sig_sorted[:, 0]
+                    sig_lead = sig_sorted[:, 0]     # = the method C candidate
                     sig_sub  = sig_sorted[:, 1:]
                     dot_sig = sig_lead.px*sig_sub.px + sig_lead.py*sig_sub.py + sig_lead.pz*sig_sub.pz
                     denom_sig = sig_lead.p * sig_sub.p
@@ -800,52 +753,31 @@ if __name__ == '__main__':
         print(f"    [1b] removed: segment   cos(angle) < -0.8     : {dseg}")
         print(f"    duplicate pairs still remaining afterwards    : {dsurv}{extra}")
 
-    print("\n" + "=" * 80)
-    print(" COLLINEAR (NON-DUPLICATE) STUDY — outertrack/segment test on pairs that are")
-    print(" NOT duplicates but have inner-track cosA above a threshold (DIAGNOSTIC, not vetoed)")
-    print(" Note: thresholds are cumulative — the 0.90 set contains the 0.95 and 0.99 sets.")
-    print("=" * 80)
-    for ds_name, prefix in [("COSMIC MC", "cosmic"), ("NoBPTX DATA", "nobptx")]:
-        print(f"\n  {ds_name}")
-        for thr_tag, thr_txt in [("99", "0.99"), ("95", "0.95"), ("90", "0.90")]:
-            ctot  = out[f"n_coll_pairs_total_{prefix}_{thr_tag}"]
-            cout  = out[f"n_coll_removed_outer_{prefix}_{thr_tag}"]
-            cseg  = out[f"n_coll_removed_seg_{prefix}_{thr_tag}"]
-            csurv = out[f"n_coll_pairs_surviving_{prefix}_{thr_tag}"]
-            cev   = out[f"n_evt_coll_{prefix}_{thr_tag}"]
-            cevr  = out[f"n_evt_coll_removed_{prefix}_{thr_tag}"]
-            print(f"    cosA > {thr_txt}")
-            print(f"        collinear (non-dup) pairs                       : {ctot}")
-            print(f"        [a] removed: outertrack cos(angle) < -0.8       : {cout}")
-            print(f"        [b] removed: segment    cos(angle) < -0.8       : {cseg}")
-            print(f"        collinear pairs surviving both                  : {csurv}")
-            print(f"        events with >=1 collinear (non-dup) pair        : {cev}")
-            print(f"        events with >=1 collinear pair removed (a or b) : {cevr}")
-
     print("\n" + "-" * 80)
     print("  CUTS APPLIED — and exactly which muon each one acts on")
     print("-" * 80)
-    print("  Cuts (a)-(d) are checked ONLY on the leading (highest-pT) muon of the event.")
-    print("  The event is kept only if the leading muon passes all of them. When it does,")
-    print("  every other muon in the event is kept too -- the sub-leading muons are NOT")
-    print("  required to pass (a)-(d) (their only requirement is inTimeMuon, further down):")
-    print("      (a) leading muon  pt > 30 GeV")
-    print("      (b) leading muon  |eta| < 2.4")
-    print("      (c) leading muon  mediumId == True")
-    print("      (d) leading muon  pfRelIso03_all < 0.18")
+    print("  METHOD C: EVERY muon is tested against cuts (a)-(d); the CANDIDATE is the")
+    print("  highest-pT muon that passes ALL of them (it need NOT be the highest-pT muon")
+    print("  of the event). The event is kept only if a candidate exists. All other muons")
+    print("  are RETAINED with no cuts (their only requirement is inTimeMuon, further")
+    print("  down), and the candidate is placed at index 0 of the muon list:")
+    print("      (a) candidate muon  pt > 30 GeV")
+    print("      (b) candidate muon  |eta| < 2.4")
+    print("      (c) candidate muon  mediumId == True")
+    print("      (d) candidate muon  pfRelIso03_all < 0.18")
+    print("      (signal only)       candidate must also have 0.1 < |dxy| < 10 cm")
     print("      (NoBPTX only)     event has npvsGood == 0  (no good primary vertex)")
     print("  inTimeMuon requirement (applied BEFORE the three veto stages below):")
-    print("      every SUB-LEADING muon (any muon that is not the highest-pT one) must")
-    print("      have inTimeMuon == True. The leading muon is always kept and is NOT")
-    print("      required to be in-time. Single-muon events have no sub-leading muon,")
-    print("      so nothing about them changes.")
-    print("      If a two-or-more-muon event has ALL of its sub-leading muons out-of-time,")
-    print("      those are removed and only the leading muon is left; that event can no")
+    print("      every NON-CANDIDATE muon must have inTimeMuon == True. The candidate is")
+    print("      always kept and is NOT required to be in-time. Single-muon events have")
+    print("      no other muon, so nothing about them changes.")
+    print("      If a two-or-more-muon event has ALL of its non-candidate muons out-of-time,")
+    print("      those are removed and only the candidate is left; that event can no")
     print("      longer form a muon pair, so it is KEPT (there is nothing to veto).")
     print("  Three cosmic-veto stages, applied only to events that still have >=2 in-time muons:")
     print("      [1] a duplicate pair (|deta|<0.01, |dphi|<0.001) is removed if")
     print("          its outertrack cos(angle) < -0.8, otherwise if its segment cos(angle) < -0.8")
-    print("      [2] cos(angle) < -0.99 between the leading muon and ANY sub-leading muon")
+    print("      [2] cos(angle) < -0.99 between the candidate and ANY other retained muon")
     print("      [3] dt < -20 ns between the highest-pT muon in the upper half (phi>0) and")
     print("          the highest-pT muon in the lower half (phi<0), applied only when BOTH")
     print("          of those two muons have timeNDof > 7")
@@ -854,32 +786,32 @@ if __name__ == '__main__':
     for ds_name, prefix in [("COSMIC MC", "cosmic"), ("NoBPTX DATA", "nobptx")]:
         n1     = out[f"n_evt_single_mu_{prefix}"]     # events with exactly one muon
         g2o    = out[f"n_evt_ge2_orig_{prefix}"]      # events with >=2 muons (before inTimeMuon)
-        itm1   = out[f"n_evt_itm_to_1mu_{prefix}"]    # >=2mu events left with only the leading muon
+        itm1   = out[f"n_evt_itm_to_1mu_{prefix}"]    # >=2mu events left with only the candidate
         e0     = out[f"n_evt_enter_{prefix}"]         # >=2 in-time-muon events entering the veto
         e1     = out[f"n_evt_after_dup_{prefix}"]
         e2     = out[f"n_evt_after_cosA_{prefix}"]
         e3     = out[f"n_evt_after_dt_{prefix}"]
         n_proc = out[f"n_events_total_{prefix}"]
         surv_total  = n1 + itm1 + e3
-        enter_total = n1 + g2o                        # every event that passed the leading-muon cuts (has >=1 muon)
+        enter_total = n1 + g2o                        # every event with a method C candidate (has >=1 muon)
         print(f"\n  {ds_name} — how many cosmic events remain after each cut:")
         if prefix == "nobptx":
-            print(f"    (information only, NOT removed here) NoBPTX events whose leading muon")
+            print(f"    (information only, NOT removed here) NoBPTX events whose candidate muon")
             print(f"    has a near-identical duplicate track      : {out['n_events_with_dup_nobptx']}")
         print(f"    events with exactly ONE muon (skip every veto stage, always kept) : {n1}")
         print(f"    events with TWO OR MORE muons (before the inTimeMuon requirement) : {g2o}")
-        print(f"    -- now require inTimeMuon == True on every sub-leading muon --")
-        print(f"    ... of those, events now left with ONLY the leading muon")
-        print(f"        (all their sub-leading muons were out-of-time) -> KEPT       : {itm1}")
+        print(f"    -- now require inTimeMuon == True on every non-candidate muon --")
+        print(f"    ... of those, events now left with ONLY the candidate")
+        print(f"        (all their non-candidate muons were out-of-time) -> KEPT     : {itm1}")
         print(f"    ... events that STILL have >=2 in-time muons -> enter the veto    : {e0}")
         print(f"        (consistency check: {itm1} + {e0} = {itm1 + e0}, should equal {g2o})")
         print(f"    [1] remaining after duplicate removal (outertrack + segment cos(angle)) : {e1}   (removed {e0 - e1})")
-        print(f"    [2] remaining after cos(angle) < -0.99 (leading vs sub-leading)        : {e2}   (removed {e1 - e2})")
+        print(f"    [2] remaining after cos(angle) < -0.99 (candidate vs retained)         : {e2}   (removed {e1 - e2})")
         print(f"    [3] remaining after dt < -20 ns (both muons timeNDof > 7)              : {e3}   (removed {e2 - e3})")
         print(f"    ---------------- TOTAL cosmic events remaining ----------------")
-        print(f"    {n1} (one muon) + {itm1} (only leading muon left) + {e3} (>=2 muons, passed veto) = {surv_total}")
+        print(f"    {n1} (one muon) + {itm1} (only candidate left) + {e3} (>=2 muons, passed veto) = {surv_total}")
         if enter_total > 0:
-            print(f"    as a fraction of events passing the leading-muon cuts : {surv_total}/{enter_total} = {100.0*surv_total/enter_total:.2f}%")
+            print(f"    as a fraction of events with a method C candidate    : {surv_total}/{enter_total} = {100.0*surv_total/enter_total:.2f}%")
         if n_proc > 0:
             print(f"    as a fraction of ALL events processed                 : {surv_total}/{n_proc} = {100.0*surv_total/n_proc:.2f}%")
     print("=" * 80 + "\n")
@@ -894,7 +826,7 @@ if __name__ == '__main__':
         print(f"\n  {ds_name}:")
         print(f"    total events processed                                    : {n_total}")
         print(f"    events with exactly one muon, before any selection        : {n_single_raw}")
-        print(f"    events with exactly one muon, after the leading-muon cuts : {n_single_cut}")
+        print(f"    events with exactly one muon, after method C selection    : {n_single_cut}")
         if n_total > 0:
             print(f"    one-muon fraction before selection : {n_single_raw}/{n_total} = {100.0*n_single_raw/n_total:.2f}%")
             print(f"    one-muon fraction after selection  : {n_single_cut}/{n_total} = {100.0*n_single_cut/n_total:.2f}%")
@@ -921,8 +853,9 @@ if __name__ == '__main__':
             fh.write(f"{ds_name}: duplicate PAIRS that survive the outertrack + segment cos(angle) < -0.8 cuts.\n")
             fh.write("These still look like duplicate / back-to-back muons after the outertrack + segment\n")
             fh.write("removal, so they keep registering as duplicates. One row per surviving pair (muons a and b).\n")
-            fh.write("NOTE: with the inTimeMuon requirement now applied to sub-leadings, only\n")
-            fh.write("in-time muons reach this stage, so these are in-time duplicate survivors.\n")
+            fh.write("NOTE: muon selection uses METHOD C (candidate = highest-pT muon passing all quality\n")
+            fh.write("cuts; all other muons retained). With the inTimeMuon requirement applied to\n")
+            fh.write("non-candidates, only in-time muons reach this stage.\n")
             fh.write("Diagnostics that explain why STAGE 1 missed them:\n")
             fh.write("  cos_out = outertrack cos(angle)  (nan = pair not outertrack-eligible / no outer track)\n")
             fh.write("  cos_seg = segment    cos(angle)  (nan = a or b has nSeg == 0)\n")
@@ -942,53 +875,11 @@ if __name__ == '__main__':
                         rr, ll, ee, apt, aeta, aphi, bpt, beta, bphi,
                         co, csg, aopt, aoeta, aophi, bopt, boeta, bophi, ans, bns, str(el))
                 )
-    
+
         print(f"Wrote {len(rows)} {ds_name} surviving duplicate pair(s) to: {os.path.abspath(path)}")
 
     _write_dup_survivor_file("dup_survivor_events_MC.txt",   "COSMIC MC",   out["dup_surv_rows_cosmic"])
     _write_dup_survivor_file("dup_survivor_events_data.txt", "NoBPTX DATA", out["dup_surv_rows_nobptx"])
-
-    _hdr_coll = (
-        "{:>8} {:>7} {:>13}  {:>7}  "
-        "{:>8} {:>7} {:>7}  {:>8} {:>7} {:>7}  "
-        "{:>8} {:>8}  {:>8} {:>8} {:>8}  {:>8} {:>8} {:>8}  {:>6} {:>6}  {:>5}\n"
-    ).format("run", "lumi", "event", "cos_ab",
-             "a_pt", "a_eta", "a_phi", "b_pt", "b_eta", "b_phi",
-             "cos_out", "cos_seg",
-             "a_otpt", "a_oteta", "a_otphi", "b_otpt", "b_oteta", "b_otphi",
-             "a_nSeg", "b_nSeg", "elig")
-
-    def _write_collinear_file(path, ds_name, rows):
-        with open(path, "w") as fh:
-            fh.write(f"{ds_name}: COLLINEAR (non-duplicate) muon pairs with inner-track cosA > 0.90.\n")
-            fh.write("These are NOT flagged as duplicates (they fail |deta|<0.01 & |dphi|<0.001) but their\n")
-            fh.write("inner-track momenta are nearly collinear. The SAME outertrack/segment back-to-back\n")
-            fh.write("test used for duplicates is applied, to see whether the outer track reveals them as\n")
-            fh.write("split back-to-back cosmics. One row per collinear pair (muons a and b).\n")
-            fh.write("  cos_ab  = inner-track cos(angle) between a and b (the collinearity being tested)\n")
-            fh.write("  cos_out = outertrack cos(angle)  (nan = pair not outertrack-eligible / no outer track)\n")
-            fh.write("  cos_seg = segment    cos(angle)  (nan = a or b has nSeg == 0)\n")
-            fh.write("  a_otpt/b_otpt = outertrack_pt    (<= 0 means no standalone outer track)\n")
-            fh.write("  a_nSeg/b_nSeg = # muon segments,  elig = outertrack-eligible flag\n")
-            fh.write("A pair would be removed when elig and cos_out < -0.8, or when cos_seg < -0.8.\n")
-            fh.write("\n" + "=" * 126 + "\n")
-            fh.write(f" {ds_name} — {len(rows)} collinear (non-duplicate) pair(s) with cosA > 0.90\n")
-            fh.write("=" * 126 + "\n")
-            fh.write(_hdr_coll)
-            for (rr, ll, ee, cab, apt, aeta, aphi, bpt, beta, bphi,
-                 co, csg, aopt, aoeta, aophi, bopt, boeta, bophi, ans, bns, el) in rows:
-                fh.write(
-                    ("{:>8d} {:>7d} {:>13d}  {:>7.3f}  "
-                     "{:>8.3f} {:>7.3f} {:>7.3f}  {:>8.3f} {:>7.3f} {:>7.3f}  "
-                     "{:>8.3f} {:>8.3f}  {:>8.3f} {:>8.3f} {:>8.3f}  {:>8.3f} {:>8.3f} {:>8.3f}  {:>6d} {:>6d}  {:>5}\n").format(
-                        rr, ll, ee, cab, apt, aeta, aphi, bpt, beta, bphi,
-                        co, csg, aopt, aoeta, aophi, bopt, boeta, bophi, ans, bns, str(el))
-                )
-        print(f"Wrote {len(rows)} {ds_name} collinear (non-duplicate) pair(s) to: {os.path.abspath(path)}")
-
-    _write_collinear_file("collinear_events_MC.txt",   "COSMIC MC",   out["coll_rows_cosmic"])
-    _write_collinear_file("collinear_events_data.txt", "NoBPTX DATA", out["coll_rows_nobptx"])
-    print()    
     print()
 
     '''
