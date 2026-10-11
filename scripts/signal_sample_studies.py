@@ -156,10 +156,122 @@ def plot_efficiency(h_num, h_den, label):
     plt.errorbar(centers, eff, yerr=err, fmt='o', markersize=4, label=label)
 
 # ==============================================================================
+# Muon-jet vs. tau_h-jet study: settings and plotting helper
+# ==============================================================================
+HIGH_SCORE = 0.9                          # muon jets above this score get their own category
+PF_TYPES = [1, 2, 11, 13, 22, 130, 211]   # |pdgId| of PF candidates, in x-axis order
+PF_TYPE_LABELS = ["HF had", r"HF e/$\gamma$", "e", r"$\mu$", r"$\gamma$", "h0", r"h$^\pm$"]
+
+MU_STUDY_CATS = [
+    "GenMuon-matched",
+    f"GenMuon-matched, score > {HIGH_SCORE}",
+    r"1-prong $\tau_h$-matched",
+    r"3-prong $\tau_h$-matched",
+]
+
+# name: (nbins, lo, hi, x label). Values above hi go in the last bin.
+MU_STUDY_VARS = {
+    # Jet level: one entry per jet
+    "score":             (50, 0.0, 1.0, "Jet disTauTag_score1"),
+    "score_zoom":        (50, 0.9, 1.0, "Jet disTauTag_score1"),
+    "jet_pt":            (60, 0, 600, r"Jet $p_T$ [GeV]"),
+    "jet_eta":           (48, -2.4, 2.4, r"Jet $\eta$"),
+    "jet_muEF":          (50, 0, 1, "Jet muEF"),
+    "jet_chHEF":         (50, 0, 1, "Jet chHEF"),
+    "jet_neHEF":         (50, 0, 1, "Jet neHEF"),
+    "jet_chEmEF":        (50, 0, 1, "Jet chEmEF"),
+    "jet_neEmEF":        (50, 0, 1, "Jet neEmEF"),
+    "jet_nConstituents": (60, -0.5, 59.5, "Jet nConstituents"),
+    "jet_dxy":           (50, 0, 20, "Jet dxy [cm] (leading charged PF cand)"),
+    "nPF":               (60, -0.5, 59.5, "Number of PF candidates in jet"),
+    "nPFCharged":        (40, -0.5, 39.5, "Number of charged PF candidates in jet"),
+    "nPFMuon":           (5, -0.5, 4.5, "Number of PF muons in jet"),
+    "lead_pf_ptfrac":    (50, 0, 1, r"Leading PF candidate $p_T$ / jet $p_T$"),
+    "lead_pf_type":      (len(PF_TYPES), -0.5, len(PF_TYPES) - 0.5, "Leading PF candidate type"),
+    # PF-candidate level: one entry per jet constituent
+    "pf_type":           (len(PF_TYPES), -0.5, len(PF_TYPES) - 0.5, "PF candidate type"),
+    "pf_ptfrac":         (50, 0, 1, r"PF candidate $p_T$ / jet $p_T$"),
+    "pf_dR":             (40, 0, 0.4, r"$\Delta R$(PF candidate, jet axis)"),
+    "pf_absd0":          (50, 0, 20, r"PF candidate $|d_0|$ [cm] (charged)"),
+    "pf_d0sig":          (50, 0, 200, r"PF candidate $|d_0|/\sigma_{d_0}$ (charged)"),
+    "pf_pt":             (50, 0, 200, r"PF candidate $p_T$ [GeV]"),
+    "pf_eta":            (50, -2.5, 2.5, r"PF candidate $\eta$"),
+    "pf_charge":         (3, -1.5, 1.5, "PF candidate charge"),
+    "pf_puppiWeight":    (50, 0, 1, "PF candidate puppiWeight"),
+    "pf_puppiWeightNoLep": (50, 0, 1, "PF candidate puppiWeightNoLep"),
+    "pf_pvAssocQuality": (8, -0.5, 7.5, "PF candidate pvAssocQuality"),
+    "pf_d0":             (80, -20, 20, r"PF candidate $d_0$ [cm] (charged)"),
+    "pf_dz":             (80, -40, 40, r"PF candidate $d_z$ [cm] (charged)"),
+    "pf_d0Err":          (50, 0, 0.5, r"PF candidate $\sigma_{d_0}$ [cm] (charged)"),
+    "pf_dzErr":          (50, 0, 0.5, r"PF candidate $\sigma_{d_z}$ [cm] (charged)"),
+    "pf_numberOfPixelHits": (10, -0.5, 9.5, "PF candidate numberOfPixelHits (charged)"),
+    "pf_numberOfHits":   (40, -0.5, 39.5, "PF candidate numberOfHits (charged)"),
+    "pf_lostInnerHits":  (5, -1.5, 3.5, "PF candidate lostInnerHits (charged)"),
+    "pf_trkChi2":        (50, 0, 20, r"PF candidate track $\chi^2$ (charged)"),
+    "pf_vtxChi2":        (50, 0, 20, r"PF candidate vertex $\chi^2$ (charged)"),
+}
+
+# PF candidate branches filled directly as "pf_<field>". True = charged candidates only.
+# Fields missing from the ntuple are skipped.
+PF_RAW_FIELDS = {
+    "pt": False, "eta": False, "charge": False,
+    "puppiWeight": False, "puppiWeightNoLep": False, "pvAssocQuality": False,
+    "d0": True, "dz": True, "d0Err": True, "dzErr": True,
+    "numberOfPixelHits": True, "numberOfHits": True, "lostInnerHits": True,
+    "trkChi2": True, "vtxChi2": True,
+}
+
+def pf_type_index(pdgId):
+    """Maps PF candidate pdgId to its position in PF_TYPES (-1 if not listed)."""
+    abs_id = abs(pdgId)
+    idx = ak.full_like(abs_id, -1)
+    for i, t in enumerate(PF_TYPES):
+        idx = ak.where(abs_id == t, i, idx)
+    return idx
+
+def plot_mu_study_overlay(h_obj, categories, xlabel, title, outpath, logy=False, ticklabels=None):
+    """
+    Overlays one variable for each jet category. Each category is normalized to its
+    total number of entries (including under/overflow), so shapes can be compared directly.
+    """
+    present = list(h_obj.axes["cat"])
+    fig, ax = plt.subplots(figsize=(8, 7))
+    drew = False
+    for cat in categories:
+        if cat not in present:
+            continue
+        h = h_obj[{"cat": cat}]
+        total = h.values(flow=True).sum()
+        if total <= 0:
+            continue
+        ax.stairs(h.values() / total, h.axes[0].edges, label=f"{cat} (N={total:.0f})", lw=2)
+        drew = True
+
+    if not drew:
+        print(f"Skipping {outpath}: No entries.")
+        plt.close(fig)
+        return
+
+    if ticklabels is not None:
+        ax.set_xticks(range(len(ticklabels)))
+        ax.set_xticklabels(ticklabels)
+    if logy:
+        ax.set_yscale("log")
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("Fraction of entries")
+    ax.set_title(title)
+    ax.grid(True, ls="--", alpha=0.5)
+    ax.legend(fontsize=9)
+
+    fig.savefig(outpath)
+    plt.close(fig)
+    print(f"Saved plot to: {outpath}")
+
+# ==============================================================================
 # Processor Class
 # ==============================================================================
 class SignalJetProcessor(processor.ProcessorABC):
-    def __init__(self):
+        def __init__(self, do_mu_study=False):
         
         cat_axis = axis.StrCategory([], name="cat", label="Jet Category", growth=True)
         muEF_axis = axis.Regular(50, 0, 0.8, name="val", label="muEF")
@@ -224,6 +336,60 @@ class SignalJetProcessor(processor.ProcessorABC):
             "score_vs_chHEF_full": Hist(chHEF_axis, axis.Regular(50, 0.0, 1.0, name="score", label="disTauTag_score1")),
             "score_vs_chHEF_zoom": Hist(chHEF_axis, axis.Regular(50, 0.9, 1.0, name="score", label="disTauTag_score1")),
         }
+
+
+        # Muon-jet vs. tau_h-jet study histograms
+        self.do_mu_study = do_mu_study
+        for name, (nbins, lo, hi, xlabel) in MU_STUDY_VARS.items():
+            self.output[f"mustudy_{name}"] = Hist(cat_axis, axis.Regular(nbins, lo, hi, name="val", label=xlabel))
+        self.output["mustudy_n_overlap"] = 0
+        self.output["mustudy_pf_fields"] = set()
+
+    def _mu_fill(self, cat, name, values):
+        """Flattens values and fills mustudy_<name>; values above the range go in the last bin."""
+        values = ak.to_numpy(ak.drop_none(ak.flatten(values, axis=None)))
+        hi = MU_STUDY_VARS[name][2]
+        values = np.minimum(values, np.nextafter(hi, -np.inf))
+        self.output[f"mustudy_{name}"].fill(cat=cat, val=values)
+
+    def _fill_mu_study(self, cat, jets):
+        """Fills all muon-jet study histograms for one jet category (jets: [event, jet])."""
+        if ak.sum(ak.num(jets)) == 0:
+            return
+
+        pf = jets.constituents.pf
+        charged = pf.charge != 0
+        self.output["mustudy_pf_fields"] |= set(pf.fields)
+
+        # Jet level
+        self._mu_fill(cat, "score", jets.disTauTag_score1)
+        self._mu_fill(cat, "score_zoom", jets.disTauTag_score1)
+        for f in ["pt", "eta", "muEF", "chHEF", "neHEF", "chEmEF", "neEmEF", "nConstituents"]:
+            self._mu_fill(cat, f"jet_{f}", jets[f])
+        self._mu_fill(cat, "jet_dxy", jets.dxy[jets.dxy >= 0])  # dxy = -999 for jets with no charged PF cand
+
+        self._mu_fill(cat, "nPF", ak.num(pf, axis=2))
+        self._mu_fill(cat, "nPFCharged", ak.sum(charged, axis=2))
+        self._mu_fill(cat, "nPFMuon", ak.sum(abs(pf.pdgId) == 13, axis=2))
+
+        lead_pf = ak.firsts(pf[ak.argsort(pf.pt, axis=2, ascending=False)], axis=2)
+        self._mu_fill(cat, "lead_pf_ptfrac", lead_pf.pt / jets.pt)
+        self._mu_fill(cat, "lead_pf_type", pf_type_index(lead_pf.pdgId))
+
+        # PF-candidate level (jet-level quantities broadcast over each jet's constituents)
+        self._mu_fill(cat, "pf_type", pf_type_index(pf.pdgId))
+        self._mu_fill(cat, "pf_ptfrac", pf.pt / jets.pt)
+        dphi = (pf.phi - jets.phi + np.pi) % (2 * np.pi) - np.pi
+        self._mu_fill(cat, "pf_dR", np.sqrt((pf.eta - jets.eta) ** 2 + dphi ** 2))
+        self._mu_fill(cat, "pf_absd0", abs(pf.d0[charged]))
+        pf_sig = pf[charged & (pf.d0Err > 0)]
+        self._mu_fill(cat, "pf_d0sig", abs(pf_sig.d0) / pf_sig.d0Err)
+
+        for field, charged_only in PF_RAW_FIELDS.items():
+            if field not in pf.fields:
+                continue
+            values = pf[field][charged] if charged_only else pf[field]
+            self._mu_fill(cat, f"pf_{field}", values)
 
     def process(self, events):
         dataset = events.metadata.get("dataset", "Unknown")
@@ -387,7 +553,33 @@ class SignalJetProcessor(processor.ProcessorABC):
         chHEF_vals = np.minimum(ak.flatten(baseline_jets.chHEF, axis=None), 1 - 1e-6)
         score_vals = np.minimum(ak.flatten(baseline_jets.disTauTag_score1, axis=None), 1 - 1e-6)
         self.output["score_vs_chHEF_full"].fill(chHEF=chHEF_vals, score=score_vals)
-        self.output["score_vs_chHEF_zoom"].fill(chHEF=chHEF_vals, score=score_vals)           
+        self.output["score_vs_chHEF_zoom"].fill(chHEF=chHEF_vals, score=score_vals) 
+
+        # =============================================================
+        # Muon-jet vs. tau_h-jet study (baseline jets, no jet ID, so
+        # muon-rich jets are not removed by muEF / lepton-veto cuts)
+        # =============================================================
+        if self.do_mu_study:
+            mjets = baseline_jets
+            _, dr_mu = mjets.nearest(cut_filtered_events.GenMuon, return_metric=True)
+            near_gvt, dr_gvt = mjets.nearest(cut_filtered_events.GenVisStauTaus, return_metric=True)
+            mu_match = ak.fill_none(dr_mu < 0.4, False)
+            gvt_match = ak.fill_none(dr_gvt < 0.4, False)
+            dm = ak.fill_none(near_gvt.status, -1)  # GenVisTau.status = hadronic decay mode
+
+            # Jets matched to both the GenMuon and the GenVisStauTau are counted and left out
+            self.output["mustudy_n_overlap"] += ak.sum(mu_match & gvt_match)
+            mu_only = mu_match & ~gvt_match
+            tau_only = gvt_match & ~mu_match
+
+            mu_study_sel = {
+                MU_STUDY_CATS[0]: mu_only,
+                MU_STUDY_CATS[1]: mu_only & (mjets.disTauTag_score1 > HIGH_SCORE),
+                MU_STUDY_CATS[2]: tau_only & ((dm == 0) | (dm == 1) | (dm == 2)),
+                MU_STUDY_CATS[3]: tau_only & ((dm == 10) | (dm == 11)),
+            }
+            for cat, sel in mu_study_sel.items():
+                self._fill_mu_study(cat, mjets[sel])          
 
         # =============================================================
         # Grid Efficiency (Score vs pT)
@@ -529,7 +721,7 @@ if __name__ == '__main__':
     out = runner(
         runnable,
         treename="Events",
-        processor_instance=SignalJetProcessor(),
+        processor_instance=SignalJetProcessor(do_mu_study=True),
     )
 
     # -------------------------------------------------------------
@@ -593,6 +785,37 @@ if __name__ == '__main__':
             title=f"Jet Score vs. chHEF, Baseline Jets ({sample_name.replace('_', ' ')}) v19",
             outpath=os.path.join(OUTPUT_DIR, f"{sample_name}_jet_score_vs_chHEF_{tag}_v19.pdf"),
         )  
+
+
+    # Generate the muon-jet vs. tau_h-jet study plots
+    MU_DIR = os.path.join(OUTPUT_DIR, "muon_vs_tauh_jets")
+    os.makedirs(MU_DIR, exist_ok=True)
+    for name, (nbins, lo, hi, xlabel) in MU_STUDY_VARS.items():
+        # The high-score muon category is redundant on the score plots themselves
+        cats = [c for c in MU_STUDY_CATS if c != MU_STUDY_CATS[1]] if name.startswith("score") else MU_STUDY_CATS
+        plot_mu_study_overlay(
+            out[f"mustudy_{name}"],
+            categories=cats,
+            xlabel=xlabel,
+            title=f"Muon vs. $\\tau_h$ Jets ({sample_name.replace('_', ' ')}) v19",
+            outpath=os.path.join(MU_DIR, f"{sample_name}_{name}_v19.pdf"),
+            logy=name.startswith("score"),
+            ticklabels=PF_TYPE_LABELS if name.endswith("_type") else None,
+        )
+
+    print(f"\nMuon-jet study summary ({sample_name}):")
+    h_score = out["mustudy_score"]
+    for cat in MU_STUDY_CATS:
+        if cat not in list(h_score.axes["cat"]):
+            continue
+        vals = h_score[{"cat": cat}].values()
+        n_tot = vals.sum()
+        n_high = vals[h_score.axes["val"].centers > HIGH_SCORE].sum()
+        if n_tot > 0:
+            print(f"  {cat}: {n_tot:.0f} jets, fraction with score > {HIGH_SCORE}: {n_high / n_tot:.3f}")
+    print(f"  Jets matched to both GenMuon and GenVisStauTau (left out): {out['mustudy_n_overlap']}")
+    print(f"  PF candidate fields in the ntuple that are not plotted: "
+          f"{sorted(out['mustudy_pf_fields'] - set(PF_RAW_FIELDS))}")
 
     # ==============================================================================
     # ADDITION: Generate muEF plots for 100 GeV and 500 GeV (v19)
