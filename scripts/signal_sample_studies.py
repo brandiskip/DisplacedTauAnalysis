@@ -271,7 +271,7 @@ def plot_mu_study_overlay(h_obj, categories, xlabel, title, outpath, logy=False,
 # Processor Class
 # ==============================================================================
 class SignalJetProcessor(processor.ProcessorABC):
-        def __init__(self, do_mu_study=False):
+    def __init__(self, do_mu_study=False):
         
         cat_axis = axis.StrCategory([], name="cat", label="Jet Category", growth=True)
         muEF_axis = axis.Regular(50, 0, 0.8, name="val", label="muEF")
