@@ -3,6 +3,7 @@ import pickle
 import awkward as ak
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 from hist import Hist, axis
 from coffea import processor
 import coffea.nanoevents.methods.vector as vector
@@ -33,6 +34,76 @@ def save_categorical_overlay(h_obj, xlabel, title, outpath):
     ax.set_xlabel(xlabel)
     ax.set_title(title)
     
+    fig.savefig(outpath)
+    plt.close(fig)
+    print(f"Saved plot to: {outpath}")
+
+def plot_score_chHEF_overlay(h_obj, title, outpath):
+    """
+    Overlays jet disTauTag_score1 with and without the chHEF > 0.01 cut.
+    Lower panel: (chHEF > 0.01) / (no chHEF cut) = fraction of jets kept in each score bin.
+    """
+    if np.sum(h_obj.values()) <= 0:
+        print(f"Skipping {outpath}: No jets in histogram.")
+        return
+
+    h_all = h_obj[{"cat": "no chHEF cut"}]
+    h_cut = h_obj[{"cat": "chHEF > 0.01"}]
+    edges = h_all.axes[0].edges
+
+    fig, (ax, rax) = plt.subplots(2, 1, figsize=(8, 8), sharex=True,
+                                  gridspec_kw={"height_ratios": [3, 1], "hspace": 0.05})
+
+    h_all.plot1d(ax=ax, label="no chHEF cut")
+    h_cut.plot1d(ax=ax, label="chHEF > 0.01")
+    ax.set_yscale("log")
+    ax.set_ylabel("Jets")
+    ax.set_xlabel("")
+    ax.set_title(title)
+    ax.legend()
+
+    num, den = h_cut.values(), h_all.values()
+    with np.errstate(divide="ignore", invalid="ignore"):
+        frac = num / den  # NaN in empty bins, so they aren't drawn
+        err = np.sqrt(frac * (1.0 - frac) / den)
+    rax.errorbar(h_all.axes[0].centers, frac, yerr=err, fmt="o", markersize=3, color="black")
+    rax.axhline(1.0, color="gray", ls="--", lw=1)
+    rax.set_xlim(edges[0], edges[-1])
+    rax.set_xlabel("Jet disTauTag_score1")
+    rax.set_ylabel("Fraction kept")
+    rax.grid(True, ls="--", alpha=0.5)
+
+    fig.savefig(outpath)
+    plt.close(fig)
+    print(f"Saved plot to: {outpath}")
+    print(f"  jets in range: {den.sum():.0f} (no cut) -> {num.sum():.0f} (chHEF > 0.01); "
+          f"below {edges[0]}: {h_all.values(flow=True)[0]:.0f} -> {h_cut.values(flow=True)[0]:.0f}")
+
+def plot_score_vs_chHEF(h_obj, title, outpath):
+    """
+    2D jet disTauTag_score1 vs. chHEF with a log color scale.
+    The chHEF axis is linear below 0.01 and log above; the dashed line marks the chHEF > 0.01 cut.
+    """
+    if np.sum(h_obj.values()) <= 0:
+        print(f"Skipping {outpath}: No jets in histogram.")
+        return
+
+    x_edges = h_obj.axes["chHEF"].edges
+    y_edges = h_obj.axes["score"].edges
+
+    fig, ax = plt.subplots(figsize=(9, 7))
+    mesh = ax.pcolormesh(x_edges, y_edges, h_obj.values().T, cmap="viridis", norm=LogNorm())
+    cbar = fig.colorbar(mesh, ax=ax)
+    cbar.set_label("Jets")
+
+    ax.set_xscale("symlog", linthresh=0.01)
+    ax.axvline(0.01, color="red", ls="--", lw=1.5)
+    ax.set_xlim(x_edges[0], x_edges[-1])
+    ax.set_ylim(y_edges[0], y_edges[-1])
+    ax.set_xlabel("Jet chHEF (linear below 0.01, log above; dashed line = cut)")
+    ax.set_ylabel("Jet disTauTag_score1")
+    ax.set_title(title)
+
     fig.savefig(outpath)
     plt.close(fig)
     print(f"Saved plot to: {outpath}")
@@ -112,6 +183,10 @@ class SignalJetProcessor(processor.ProcessorABC):
         d0_bins = np.arange(0, 20 + 1e-6, 0.5)
         d0_axis = axis.Variable(d0_bins, name="d0", label=r"$|d_{0}|$ (cm)")
 
+        # chHEF binning for the 2D plots: 20 linear bins below the 0.01 cut, 40 log bins above
+        chHEF_bins = np.concatenate([np.linspace(0, 0.01, 20, endpoint=False), np.geomspace(0.01, 1, 41)])
+        chHEF_axis = axis.Variable(chHEF_bins, name="chHEF", label="chHEF")
+
         self.output = {
             "muEF": Hist(cat_axis, muEF_axis),
             "total_gvt_events": 0,
@@ -139,6 +214,15 @@ class SignalJetProcessor(processor.ProcessorABC):
             "grid_num_score": 0,
             "grid_num_pt": 0,
             "grid_num_dxy": 0,
+            "grid_num_all": 0,
+
+            # Jet score with vs. without chHEF > 0.01
+            "score_chHEF_full": Hist(cat_axis, axis.Regular(50, 0.0, 1.0, name="score", label="disTauTag_score1")),
+            "score_chHEF_zoom": Hist(cat_axis, axis.Regular(50, 0.9, 1.0, name="score", label="disTauTag_score1")),
+
+            # Jet score vs. chHEF (2D)
+            "score_vs_chHEF_full": Hist(chHEF_axis, axis.Regular(50, 0.0, 1.0, name="score", label="disTauTag_score1")),
+            "score_vs_chHEF_zoom": Hist(chHEF_axis, axis.Regular(50, 0.9, 1.0, name="score", label="disTauTag_score1")),
         }
 
     def process(self, events):
@@ -286,9 +370,29 @@ class SignalJetProcessor(processor.ProcessorABC):
             self.output["num_d0_highest"].fill(dataset=dataset, variant=label, d0=ak.flatten(matched_gen.d0, axis=None))
 
         # =============================================================
+        # Jet Score: with vs. without chHEF > 0.01 (baseline jets)
+        # =============================================================
+        score_variants = {
+            "no chHEF cut": baseline_jets,
+            "chHEF > 0.01": baseline_jets_chHEF,
+        }
+        for label, jcol in score_variants.items():
+            # A score of exactly 1.0 would go to the overflow bin; keep it in the last visible bin
+            score = np.minimum(ak.flatten(jcol.disTauTag_score1, axis=None), 1 - 1e-6)
+            self.output["score_chHEF_full"].fill(cat=label, score=score)
+            self.output["score_chHEF_zoom"].fill(cat=label, score=score) 
+
+        # Jet score vs. chHEF (2D): baseline jets with no chHEF cut, since chHEF is on the axis.
+        # Values of exactly 1.0 are kept in the last bin, as for the 1D score plots.
+        chHEF_vals = np.minimum(ak.flatten(baseline_jets.chHEF, axis=None), 1 - 1e-6)
+        score_vals = np.minimum(ak.flatten(baseline_jets.disTauTag_score1, axis=None), 1 - 1e-6)
+        self.output["score_vs_chHEF_full"].fill(chHEF=chHEF_vals, score=score_vals)
+        self.output["score_vs_chHEF_zoom"].fill(chHEF=chHEF_vals, score=score_vals)           
+
+        # =============================================================
         # Grid Efficiency (Score vs pT)
         # =============================================================
-        '''
+        
         grid_jets = cut_filtered_events.Jet[
             (abs(cut_filtered_events.Jet.eta) < 2.4) & 
             (cut_filtered_events.Jet.pt > 20) & 
@@ -303,9 +407,27 @@ class SignalJetProcessor(processor.ProcessorABC):
         grid_jets = cut_filtered_events.Jet[
             (abs(cut_filtered_events.Jet.eta) < 2.4) & 
             (cut_filtered_events.Jet.pt > 20)]
-
+        '''
+        '''
+        grid_jets = cut_filtered_events.Jet[
+            (abs(cut_filtered_events.Jet.eta) < 2.4) &
+            (cut_filtered_events.Jet.pt > 20) &
+            (cut_filtered_events.Jet.neHEF < 0.99) &
+            (cut_filtered_events.Jet.neEmEF < 0.9) &
+            ((cut_filtered_events.Jet.chMultiplicity + cut_filtered_events.Jet.neMultiplicity) > 1) &
+            (cut_filtered_events.Jet.chMultiplicity > 0) &
+            (cut_filtered_events.Jet.muEF < 0.8) &
+            (cut_filtered_events.Jet.chEmEF < 0.8) &
+            (cut_filtered_events.Jet.chHEF > 0.01)
+        ]
+        '''
         # Denominator: Total GenVisStauTaus in the event
         self.output["grid_den_gvt"] += ak.sum(ak.num(cut_filtered_events.GenVisStauTaus))
+
+        # Numerator 0: All jets, no leading chosen
+        matched_all = cut_filtered_events.GenVisStauTaus.nearest(grid_jets, threshold=0.4)
+        matched_all = ak.drop_none(matched_all)
+        self.output["grid_num_all"] += ak.sum(ak.num(matched_all))
 
         # Numerator 1: Leading Score Jet Matched
         jets_by_score = grid_jets[ak.argsort(grid_jets.disTauTag_score1, ascending=False)]
@@ -456,6 +578,22 @@ if __name__ == '__main__':
     muEF_outpath = os.path.join(OUTPUT_DIR, f"Stau_300_100mm_muEF_Matched_vs_Unmatched_v19.pdf")
     save_categorical_overlay(out["muEF"], "muEF", muEF_title, muEF_outpath)
 
+    # Generate the jet score plots (with vs. without chHEF > 0.01)
+    for key, tag in [("score_chHEF_full", "0to1"), ("score_chHEF_zoom", "0p9to1")]:
+        plot_score_chHEF_overlay(
+            out[key],
+            title=f"Jet Score, Baseline Jets ({sample_name.replace('_', ' ')}) v19",
+            outpath=os.path.join(OUTPUT_DIR, f"{sample_name}_jet_score_chHEF_{tag}_v19.pdf"),
+        )  
+
+    # Generate the 2D jet score vs. chHEF plots
+    for key, tag in [("score_vs_chHEF_full", "0to1"), ("score_vs_chHEF_zoom", "0p9to1")]:
+        plot_score_vs_chHEF(
+            out[key],
+            title=f"Jet Score vs. chHEF, Baseline Jets ({sample_name.replace('_', ' ')}) v19",
+            outpath=os.path.join(OUTPUT_DIR, f"{sample_name}_jet_score_vs_chHEF_{tag}_v19.pdf"),
+        )  
+
     # ==============================================================================
     # ADDITION: Generate muEF plots for 100 GeV and 500 GeV (v19)
     # ==============================================================================
@@ -492,6 +630,7 @@ if __name__ == '__main__':
     import json
     import matplotlib.cm as cm
     import matplotlib.colors as mcolors
+    import matplotlib.patheffects as pe
 
     masses = [100, 200, 300, 500]
     lifetimes = [1, 10, 100, 1000]
@@ -499,6 +638,7 @@ if __name__ == '__main__':
     grid_data_score = []
     grid_data_pt = []
     grid_data_dxy = []
+    grid_data_all = []
 
     print("\nStarting Grid Efficiency Processing...")
     for m in masses:
@@ -523,14 +663,17 @@ if __name__ == '__main__':
             num_score = out_grid["grid_num_score"]
             num_pt = out_grid["grid_num_pt"]
             num_dxy = out_grid["grid_num_dxy"]
+            num_all = out_grid["grid_num_all"]
             
             eff_score = num_score / den if den > 0 else 0.0
             eff_pt = num_pt / den if den > 0 else 0.0
             eff_dxy   = num_dxy   / den if den > 0 else 0.0
+            eff_all = num_all / den if den > 0 else 0.0
             
             grid_data_score.append({"mass": m, "lifetime": ct, "efficiency": eff_score})
             grid_data_pt.append({"mass": m, "lifetime": ct, "efficiency": eff_pt})
             grid_data_dxy.append( {"mass": m, "lifetime": ct, "efficiency": eff_dxy})
+            grid_data_all.append({"mass": m, "lifetime": ct, "efficiency": eff_all})
 
     # Save to JSON
     with open(os.path.join(OUTPUT_DIR, "grid_eff_score.json"), "w") as f:
@@ -539,6 +682,8 @@ if __name__ == '__main__':
         json.dump(grid_data_pt, f, indent=4)
     with open(os.path.join(OUTPUT_DIR, "grid_eff_dxy.json"), "w") as f:    # <-- ADD THIS
         json.dump(grid_data_dxy, f, indent=4)
+    with open(os.path.join(OUTPUT_DIR, "grid_eff_all.json"), "w") as f:
+        json.dump(grid_data_all, f, indent=4)
 
     # Plotting Function
     def plot_efficiency_grid(data_list, title, out_filename):
@@ -556,29 +701,36 @@ if __name__ == '__main__':
         Z = Z[::-1]
         lts = lifetimes[::-1]
 
-        fig, ax = plt.subplots(figsize=(10, 8))
+        fig, ax = plt.subplots(figsize=(650/72, 566/72), constrained_layout=True)
         cmap = cm.get_cmap("plasma")
         norm = mcolors.Normalize(vmin=0, vmax=1)
         im = ax.imshow(Z, cmap=cmap, norm=norm)
+        ax.set_aspect("auto")
 
         ax.set_xticks(range(len(masses)))
         ax.set_xticklabels([str(m) for m in masses])
         ax.set_yticks(range(len(lts)))
         ax.set_yticklabels([f"{lt} mm" for lt in lts])
+        ax.tick_params(axis="both", labelsize=18)
         
-        ax.set_xlabel("Mass [GeV]")
-        ax.set_ylabel(r"$c\tau$ [mm]")
-        plt.title(title, fontsize=10, pad=15)
+        ax.set_xlabel("Mass [GeV]", fontsize=20)
+        ax.set_ylabel(r"$c\tau$ [mm]", fontsize=20)
+        plt.title(title, fontsize=15, pad=15)
 
         for i in range(len(lts)):
             for j in range(len(masses)):
                 eff_val = Z[i, j]
                 if eff_val > 0:
                     text_color = "white" if eff_val < 0.5 else "black"
-                    ax.text(j, i, f"{eff_val:.3f}", ha="center", va="center", color=text_color, fontsize=9)
+                    ax.text(j, i, f"{eff_val:.3f}", ha="center", va="center",
+                            color=text_color, fontsize=26, fontweight="bold")
 
         cbar = plt.colorbar(im, ax=ax)
-        cbar.set_label("Efficiency")
+        cbar.set_label("Efficiency", fontsize=18)
+        cbar.ax.tick_params(axis="both", labelsize=18)
+        ax.set_xlabel("Mass [GeV]", fontsize=22)
+        ax.set_ylabel(r"$c\tau$ [mm]", fontsize=22)
+        plt.title(title, fontsize=22, pad=15)
         outpath = os.path.join(OUTPUT_DIR, out_filename)
         plt.savefig(outpath)
         plt.close()
@@ -605,19 +757,25 @@ if __name__ == '__main__':
     '''
     plot_efficiency_grid(
         grid_data_score, 
-        "(Leading Score Jet Matched) / (GenVisTaus)]", 
-        "grid_efficiency_leading_score_v19_noJetId.pdf"
+        "(Leading Score Matched Jets) / (GenVisTaus)]", 
+        "grid_efficiency_leading_score_v19_jetId_muEF05_noChHEF.pdf"
     )
     
     plot_efficiency_grid(
         grid_data_pt, 
-        "(Leading $p_T$ Jet Matched) / (GenVisTaus)]", 
-        "grid_efficiency_leading_pt_v19_noJetId.pdf"
+        "(Leading pT Matched Jets) / (GenVisTaus)]", 
+        "grid_efficiency_leading_pt_v19_jetId_muEF05_noChHEF.pdf"
     )
 
     plot_efficiency_grid(
         grid_data_dxy,
-        r"(Leading $|d_{xy}|$ Jet Matched) / (GenVisTaus)]",
-        "grid_efficiency_leading_dxy_v19_noJetId.pdf"
+        r"(Leading |d_{xy}| Matched Jets) / (GenVisTaus)]",
+        "grid_efficiency_leading_dxy_v19_jetId_muEF05_noChHEF.pdf"
+    )
+
+    plot_efficiency_grid(
+        grid_data_all,
+        r"(All Matched Jets) / (GenVisTaus)]",
+        "grid_efficiency_all_jets_v19_jetId_muEF05_noChHEF.pdf"
     )
     print("\nDone! All muEF plots generated.")
